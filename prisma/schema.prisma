@@ -54,6 +54,23 @@ enum ConsignmentStatus {
   RETURNED
 }
 
+enum RevenueType {
+  VENDA
+  REEMBOLSO
+  OUTRO
+}
+
+enum ExpenseCategory {
+  LIMPEZA
+  REPARO
+  COMBUSTIVEL
+  TRANSPORTE
+  EMBALAGEM
+  CABIDE
+  MARKETING
+  OUTRO
+}
+
 model Company {
   id           String        @id @default(cuid())
   name         String
@@ -68,6 +85,8 @@ model Company {
   pieces       Piece[]
   stores       Store[]
   consignments Consignment[]
+  revenues     Revenue[]
+  expenses     Expense[]
 }
 
 model User {
@@ -170,11 +189,11 @@ model Color {
 }
 
 model Piece {
-  id                 String            @id @default(cuid())
+  id                 String                 @id @default(cuid())
   companyId          String
   lotId              String
   code               String
-  qrCode             String            @unique
+  qrCode             String                 @unique
   name               String
   categoryId         String
   brandId            String
@@ -182,25 +201,26 @@ model Piece {
   sizeId             String
   condition          PieceCondition
   gender             Gender
-  status             PieceStatus       @default(RECEBIDA)
+  status             PieceStatus            @default(RECEBIDA)
   purchasePrice      Float
   estimatedSalePrice Float
-  notes              String?           @db.Text
+  notes              String?                @db.Text
   room               String?
   rack               String?
   box                String?
   drawer             String?
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
-  company            Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  lot                Lot               @relation(fields: [lotId], references: [id], onDelete: Cascade)
-  category           Category          @relation(fields: [categoryId], references: [id])
-  brand              Brand             @relation(fields: [brandId], references: [id])
-  size               Size              @relation(fields: [sizeId], references: [id])
-  color              Color             @relation(fields: [colorId], references: [id])
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  company            Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  lot                Lot                    @relation(fields: [lotId], references: [id], onDelete: Cascade)
+  category           Category               @relation(fields: [categoryId], references: [id])
+  brand              Brand                  @relation(fields: [brandId], references: [id])
+  size               Size                   @relation(fields: [sizeId], references: [id])
+  color              Color                  @relation(fields: [colorId], references: [id])
   images             PieceImage[]
   history            PieceHistory[]
   consignmentItems   ConsignmentItem[]
+  apportionments     ExpenseApportionment[]
 }
 
 model PieceImage {
@@ -263,4 +283,39 @@ model ConsignmentItem {
   piece           Piece       @relation(fields: [pieceId], references: [id], onDelete: Cascade)
 
   @@id([consignmentId, pieceId])
+}
+
+model Revenue {
+  id          String      @id @default(cuid())
+  companyId   String
+  amount      Float
+  type        RevenueType
+  description String?     @db.Text
+  date        DateTime
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+model Expense {
+  id             String                 @id @default(cuid())
+  companyId      String
+  amount         Float
+  category       ExpenseCategory
+  description    String?                @db.Text
+  date           DateTime
+  isApportioned  Boolean                @default(false)
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  company        Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  apportionments ExpenseApportionment[]
+}
+
+model ExpenseApportionment {
+  id        String  @id @default(cuid())
+  expenseId String
+  pieceId   String
+  amount    Float
+  expense   Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  piece     Piece   @relation(fields: [pieceId], references: [id], onDelete: Cascade)
 }
