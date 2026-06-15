@@ -7,10 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ==========================================
-// ENUMS (Máquinas de Estado e Tipos)
-// ==========================================
-
 enum Role {
   OWNER
   MANAGER
@@ -52,37 +48,39 @@ enum Gender {
   INFANTIL
 }
 
-// ==========================================
-// NÚCLEO DO SISTEMA E MULTI-TENANT
-// ==========================================
+enum ConsignmentStatus {
+  ACTIVE
+  FINISHED
+  RETURNED
+}
 
 model Company {
-  id        String   @id @default(cuid())
-  name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  users      User[]
-  lots       Lot[]
-  categories Category[]
-  brands     Brand[]
-  sizes      Size[]
-  colors     Color[]
-  pieces     Piece[]
+  id           String        @id @default(cuid())
+  name         String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  users        User[]
+  lots         Lot[]
+  categories   Category[]
+  brands       Brand[]
+  sizes        Size[]
+  colors       Color[]
+  pieces       Piece[]
+  stores       Store[]
+  consignments Consignment[]
 }
 
 model User {
-  id            String    @id @default(cuid())
+  id            String         @id @default(cuid())
   companyId     String
   name          String?
-  email         String?   @unique
+  email         String?        @unique
   emailVerified DateTime?
   image         String?
-  role          Role      @default(EMPLOYEE)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  company       Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  role          Role           @default(EMPLOYEE)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  company       Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
   accounts      Account[]
   sessions      Session[]
   pieceHistory  PieceHistory[]
@@ -94,15 +92,15 @@ model Account {
   type               String
   provider           String
   providerAccountId  String
-  refresh_token      String?  @db.Text
-  access_token       String?  @db.Text
+  refresh_token      String? @db.Text
+  access_token       String? @db.Text
   expires_at         Int?
   token_type         String?
   scope              String?
-  id_token           String?  @db.Text
+  id_token           String? @db.Text
   session_state      String?
+  user               User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@unique([provider, providerAccountId])
 }
 
@@ -118,12 +116,9 @@ model VerificationToken {
   identifier String
   token      String   @unique
   expires    DateTime
+
   @@unique([identifier, token])
 }
-
-// ==========================================
-// MÓDULO DE COMPRAS (LOTES)
-// ==========================================
 
 model Lot {
   id           String     @id @default(cuid())
@@ -137,14 +132,9 @@ model Lot {
   notes        String?    @db.Text
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
-
   company      Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
   pieces       Piece[]
 }
-
-// ==========================================
-// TAXONOMIA DINÂMICA
-// ==========================================
 
 model Category {
   id        String   @id @default(cuid())
@@ -174,21 +164,17 @@ model Color {
   id        String   @id @default(cuid())
   companyId String
   name      String
-  hexCode   String?  
+  hexCode   String?
   company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   pieces    Piece[]
 }
 
-// ==========================================
-// MÓDULO DE ESTOQUE (PEÇAS)
-// ==========================================
-
 model Piece {
-  id                 String         @id @default(cuid())
+  id                 String            @id @default(cuid())
   companyId          String
   lotId              String
-  code               String         
-  qrCode             String         @unique
+  code               String
+  qrCode             String            @unique
   name               String
   categoryId         String
   brandId            String
@@ -196,37 +182,33 @@ model Piece {
   sizeId             String
   condition          PieceCondition
   gender             Gender
-  status             PieceStatus    @default(RECEBIDA)
-  purchasePrice      Float          
+  status             PieceStatus       @default(RECEBIDA)
+  purchasePrice      Float
   estimatedSalePrice Float
-  notes              String?        @db.Text
-  
+  notes              String?           @db.Text
   room               String?
   rack               String?
   box                String?
   drawer             String?
-
-  createdAt          DateTime       @default(now())
-  updatedAt          DateTime       @updatedAt
-
-  company            Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  lot                Lot            @relation(fields: [lotId], references: [id], onDelete: Cascade)
-  category           Category       @relation(fields: [categoryId], references: [id])
-  brand              Brand          @relation(fields: [brandId], references: [id])
-  size               Size           @relation(fields: [sizeId], references: [id])
-  color              Color          @relation(fields: [colorId], references: [id])
-
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  company            Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  lot                Lot               @relation(fields: [lotId], references: [id], onDelete: Cascade)
+  category           Category          @relation(fields: [categoryId], references: [id])
+  brand              Brand             @relation(fields: [brandId], references: [id])
+  size               Size              @relation(fields: [sizeId], references: [id])
+  color              Color             @relation(fields: [colorId], references: [id])
   images             PieceImage[]
   history            PieceHistory[]
+  consignmentItems   ConsignmentItem[]
 }
 
 model PieceImage {
-  id        String   @id @default(cuid())
-  pieceId   String
-  imageUrl  String
-  order     Int      @default(0) 
-  
-  piece     Piece    @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+  id       String @id @default(cuid())
+  pieceId  String
+  imageUrl String
+  order    Int    @default(0)
+  piece    Piece  @relation(fields: [pieceId], references: [id], onDelete: Cascade)
 }
 
 model PieceHistory {
@@ -237,7 +219,48 @@ model PieceHistory {
   newStatus      PieceStatus
   description    String?      @db.Text
   createdAt      DateTime     @default(now())
-
   piece          Piece        @relation(fields: [pieceId], references: [id], onDelete: Cascade)
   user           User         @relation(fields: [userId], references: [id])
+}
+
+model Store {
+  id                   String        @id @default(cuid())
+  companyId            String
+  name                 String
+  phone                String?
+  email                String?
+  address              String?
+  commissionPercentage Float
+  notes                String?       @db.Text
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  company              Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  consignments         Consignment[]
+}
+
+model Consignment {
+  id                 String            @id @default(cuid())
+  companyId          String
+  storeId            String
+  startDate          DateTime
+  expectedReturnDate DateTime?
+  status             ConsignmentStatus @default(ACTIVE)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  company            Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  store              Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  items              ConsignmentItem[]
+}
+
+model ConsignmentItem {
+  consignmentId   String
+  pieceId         String
+  listedPrice     Float
+  salePrice       Float?
+  commissionValue Float?
+  netValue        Float?
+  consignment     Consignment @relation(fields: [consignmentId], references: [id], onDelete: Cascade)
+  piece           Piece       @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+
+  @@id([consignmentId, pieceId])
 }
