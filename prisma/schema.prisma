@@ -15,6 +15,15 @@ enum Role {
   VIEWER
 }
 
+// Tipos de Origem de Compra
+enum SourceType {
+  BAZAR
+  IGREJA
+  PESSOA_FISICA
+  BRECHO
+  OUTRO
+}
+
 // Tabela Raiz (Multi-Tenant)
 model Company {
   id        String   @id @default(cuid())
@@ -23,6 +32,7 @@ model Company {
   updatedAt DateTime @updatedAt
 
   users     User[]
+  lots      Lot[]
 }
 
 model User {
@@ -42,7 +52,6 @@ model User {
   sessions      Session[]
 }
 
-// Tabelas obrigatórias para o Auth.js
 model Account {
   id                 String  @id @default(cuid())
   userId             String
@@ -76,4 +85,20 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+model Lot {
+  id           String     @id @default(cuid())
+  companyId    String
+  code         String     // Código visual (ex: Lote 001)
+  purchaseDate DateTime
+  sourceName   String     // Nome do local/pessoa
+  sourceType   SourceType
+  totalCost    Float      // Custo total em Reais (R$)
+  quantity     Int        // Quantidade de peças adquiridas
+  notes        String?    @db.Text
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  company      Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
 }
