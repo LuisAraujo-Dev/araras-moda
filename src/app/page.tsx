@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button"; // Importamos os estilos base do botão
 import { ArrowRight, Store, Package, TrendingUp } from "lucide-react";
 
 export default function Home() {
@@ -13,10 +13,12 @@ export default function Home() {
           </div>
           <span className="font-bold text-xl tracking-tight text-zinc-900">Araras Moda</span>
         </div>
-        <Link href="/login">
-          <Button variant="outline" className="font-medium">
-            Entrar no Sistema
-          </Button>
+        {/* Passamos o estilo de botão diretamente para o Link */}
+        <Link 
+          href="/login"
+          className={`${buttonVariants({ variant: "outline" })} font-medium cursor-pointer`}
+        >
+          Entrar no Sistema
         </Link>
       </header>
 
@@ -31,10 +33,12 @@ export default function Home() {
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-            <Link href="/login">
-              <Button size="lg" className="h-12 px-8 text-base gap-2 bg-zinc-900 hover:bg-zinc-800 text-white">
-                Acessar o meu Painel <ArrowRight className="w-4 h-4" />
-              </Button>
+            {/* O mesmo aqui para o botão grande principal */}
+            <Link 
+              href="/login"
+              className={`${buttonVariants({ size: "lg" })} h-12 px-8 text-base gap-2 bg-zinc-900 hover:bg-zinc-800 text-white cursor-pointer`}
+            >
+              Acessar o meu Painel <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
 
