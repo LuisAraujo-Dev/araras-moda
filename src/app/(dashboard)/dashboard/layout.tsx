@@ -17,13 +17,13 @@ import { signOut } from "next-auth/react";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Estoque", href: "/inventory", icon: Package },
-  { name: "Lotes", href: "/lots", icon: Layers },
-  { name: "Consignações", href: "/consignments", icon: Handshake },
-  { name: "Parceiros", href: "/stores", icon: Store },
-  { name: "Financeiro", href: "/finance", icon: DollarSign },
-  { name: "Relatórios", href: "/reports", icon: BarChart3 },
-  { name: "Configurações", href: "/settings", icon: Settings },
+  { name: "Estoque", href: "/dashboard/inventory", icon: Package },
+  { name: "Lotes", href: "/dashboard/lots", icon: Layers },
+  { name: "Consignações", href: "/dashboard/consignments", icon: Handshake },
+  { name: "Parceiros", href: "/dashboard/stores", icon: Store },
+  { name: "Financeiro", href: "/dashboard/finance", icon: DollarSign },
+  { name: "Relatórios", href: "/dashboard/reports", icon: BarChart3 },
+  { name: "Configurações", href: "/dashboard/settings", icon: Settings },
 ];
 
 export default function DashboardLayout({
