@@ -1,76 +1,64 @@
-// src/app/(dashboard)/inventory/page.tsx
+//src/app/(dashboard)/dashboard/inventory/page.tsx
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Package, PlusCircle, Sparkles } from "lucide-react";
-import { createPieceAction, getPiecesAction, getInventoryDependencies, seedTaxonomiesAction } from "@/app/actions/piece.actions";
+import { Package, PlusCircle, Zap } from "lucide-react";
+import { getPiecesAction, seedTaxonomyAction, createPieceAction, getTaxonomyAction } from "@/app/actions/piece.actions";
+import { Piece, Category, Brand, Lot, PieceStatus } from "@prisma/client";
 
-// 1. Importamos as tipagens exatas do Prisma
-import { Piece, Category, Brand, Size, Color, Lot } from "@prisma/client";
-
-// 2. Criamos um tipo combinado para a Peça que inclui as suas relações
+// Tipagens estritas para substituir o "any"
 type PieceWithRelations = Piece & {
   category: Category;
   brand: Brand;
-  size: Size;
-  color: Color;
   lot: Lot;
 };
 
-// 3. Tipamos o nosso objeto de dependências (Taxonomia)
-type InventoryDependencies = {
-  lots: Lot[];
+type TaxonomyData = {
   categories: Category[];
   brands: Brand[];
-  sizes: Size[];
-  colors: Color[];
+  lots: Lot[];
 };
 
 export default function InventoryPage() {
   const mockCompanyId = "company-placeholder-id";
-  const mockUserId = "user-placeholder-id";
 
-  // Substituímos os 'any' pelos tipos corretos
   const [pieces, setPieces] = useState<PieceWithRelations[]>([]);
-  const [dependencies, setDependencies] = useState<InventoryDependencies>({ 
-    lots: [], categories: [], brands: [], sizes: [], colors: [] 
-  });
+  const [taxonomy, setTaxonomy] = useState<TaxonomyData>({ categories: [], brands: [], lots: [] });
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Envolvemos o loadData num useCallback para o React saber que a função é estável
   const loadData = useCallback(async () => {
-    const [piecesData, depsData] = await Promise.all([
+    const [piecesData, taxonomyData] = await Promise.all([
       getPiecesAction(mockCompanyId),
-      getInventoryDependencies(mockCompanyId),
+      getTaxonomyAction(mockCompanyId)
     ]);
-    
-    // Forçamos a tipagem dos dados recebidos da Action
     setPieces(piecesData as PieceWithRelations[]);
-    setDependencies(depsData as InventoryDependencies);
+    setTaxonomy(taxonomyData as TaxonomyData);
   }, []);
 
   useEffect(() => {
-    // Definir a função assíncrona internamente resolve o erro de "cascading renders"
     const fetchInitialData = async () => {
       await loadData();
     };
-    
     fetchInitialData();
   }, [loadData]);
 
   async function handleSeed() {
-    const res = await seedTaxonomiesAction(mockCompanyId);
-    if (res.success) {
-      await loadData();
+    setLoading(true);
+    const result = await seedTaxonomyAction(mockCompanyId);
+    setLoading(false);
+    
+    if (result.error) {
+      alert(result.error);
     } else {
-      alert(res.error);
+      alert("Sucesso! O sistema gerou categorias de teste. O botão de cadastro foi desbloqueado.");
+      await loadData();
     }
   }
 
@@ -80,22 +68,17 @@ export default function InventoryPage() {
 
     const formData = new FormData(event.currentTarget);
     const data = {
-      lotId: formData.get("lotId") as string,
       code: formData.get("code") as string,
-      qrCode: formData.get("qrCode") as string,
       name: formData.get("name") as string,
       categoryId: formData.get("categoryId") as string,
       brandId: formData.get("brandId") as string,
-      colorId: formData.get("colorId") as string,
-      sizeId: formData.get("sizeId") as string,
-      condition: formData.get("condition") as string,
-      gender: formData.get("gender") as string,
+      lotId: formData.get("lotId") as string,
       purchasePrice: Number(formData.get("purchasePrice")),
       estimatedSalePrice: Number(formData.get("estimatedSalePrice")),
-      notes: formData.get("notes") as string,
+      status: PieceStatus.ESTOQUE
     };
 
-    const result = await createPieceAction(mockCompanyId, mockUserId, data);
+    const result = await createPieceAction(mockCompanyId, data);
     setLoading(false);
 
     if (result.success) {
@@ -106,123 +89,93 @@ export default function InventoryPage() {
     }
   }
 
-  const hasDeps = dependencies.lots.length > 0 && dependencies.categories.length > 0;
+  const formatCurrency = (val: number) =>
+    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-zinc-950">Estoque / Inventário</h1>
-          <p className="text-zinc-500">Gerencie as peças de vestuário e acompanhe o fluxo de estados.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-[#0A244A]">Minha Arara</h1>
+          <p className="text-[#4B4B4B] mt-1">Gerencie as peças de vestuário e acompanhe o fluxo de estados.</p>
         </div>
 
-        <div className="flex gap-3">
-          {!hasDeps && (
-            <Button variant="outline" onClick={handleSeed} className="flex items-center gap-2 border-dashed">
-              <Sparkles className="w-4 h-4 text-amber-500" />
-              Carga Rápida de Teste
-            </Button>
-          )}
+        <div className="flex items-center gap-3">
+          <Button
+            onClick={handleSeed}
+            variant="outline"
+            className="flex items-center gap-2 cursor-pointer border-[#F4C21A] text-[#0A244A] hover:bg-[#F4C21A] hover:text-[#0A244A] transition-colors font-medium shadow-sm"
+            disabled={loading}
+          >
+            <Zap className="w-4 h-4" />
+            Carga Rápida de Teste
+          </Button>
 
           <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger disabled={!hasDeps} className={`${buttonVariants({ variant: "default" })} flex items-center gap-2 disabled:opacity-50`}>
+            {/* O asChild foi removido e a classe do botão foi aplicada diretamente no DialogTrigger para evitar conflitos de tag button dentro de button */}
+            <DialogTrigger 
+              className={`flex items-center justify-center gap-2 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white transition-colors shadow-sm h-10 px-4 rounded-md text-sm font-medium ${taxonomy.categories.length === 0 ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
+            >
               <PlusCircle className="w-4 h-4" />
               Cadastrar Peça
             </DialogTrigger>
-            <DialogContent className="sm:max-w-500px">
+            <DialogContent className="sm:max-w-125">
               <DialogHeader>
-                <DialogTitle>Cadastrar Nova Peça</DialogTitle>
-                <DialogDescription>Associe as características físicas da peça ao seu lote.</DialogDescription>
+                <DialogTitle className="text-[#0A244A]">Cadastrar Nova Peça</DialogTitle>
+                <DialogDescription className="text-[#4B4B4B]">
+                  Preencha os detalhes da peça para adicioná-la à sua Arara.
+                </DialogDescription>
               </DialogHeader>
+              
               <form onSubmit={handleSubmit} className="space-y-4 pt-2">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <Label htmlFor="lotId">Lote de Origem</Label>
-                    <select id="lotId" name="lotId" className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
-                      {dependencies.lots.map((l: Lot) => <option key={l.id} value={l.id}>{l.code}</option>)}
-                    </select>
+                    <Label htmlFor="code" className="text-[#0A244A]">SKU / Código</Label>
+                    <Input id="code" name="code" placeholder="Ex: CAM-001" required />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="code">Código SKU interno</Label>
-                    <Input id="code" name="code" placeholder="Ex: P-001" required />
+                    <Label htmlFor="name" className="text-[#0A244A]">Nome da Peça</Label>
+                    <Input id="name" name="name" placeholder="Ex: Camiseta Vintage" required />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-1">
-                    <Label htmlFor="qrCode">Código de Barras / QR</Label>
-                    <Input id="qrCode" name="qrCode" placeholder="Ex: QR-12345" required />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="name">Identificação / Nome</Label>
-                    <Input id="name" name="name" placeholder="Ex: Camisa Seda Floral" required />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label htmlFor="categoryId">Categoria</Label>
+                    <Label htmlFor="categoryId" className="text-[#0A244A]">Categoria</Label>
                     <select id="categoryId" name="categoryId" className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
-                      {dependencies.categories.map((c: Category) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      <option value="">Selecione...</option>
+                      {taxonomy.categories.map((c: Category) => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="brandId">Marca</Label>
+                    <Label htmlFor="brandId" className="text-[#0A244A]">Marca</Label>
                     <select id="brandId" name="brandId" className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
-                      {dependencies.brands.map((b: Brand) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                      <option value="">Selecione...</option>
+                      {taxonomy.brands.map((b: Brand) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="lotId" className="text-[#0A244A]">Lote Origem</Label>
+                    <select id="lotId" name="lotId" className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
+                      <option value="">Selecione...</option>
+                      {taxonomy.lots.map((l: Lot) => <option key={l.id} value={l.id}>{l.code}</option>)}
                     </select>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <Label htmlFor="colorId">Cor Principal</Label>
-                    <select id="colorId" name="colorId" className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
-                      {dependencies.colors.map((co: Color) => <option key={co.id} value={co.id}>{co.name}</option>)}
-                    </select>
+                    <Label htmlFor="purchasePrice" className="text-[#0A244A]">Custo (R$)</Label>
+                    <Input id="purchasePrice" name="purchasePrice" type="number" step="0.01" min="0" required />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="sizeId">Tamanho</Label>
-                    <select id="sizeId" name="sizeId" className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
-                      {dependencies.sizes.map((s: Size) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
+                    <Label htmlFor="estimatedSalePrice" className="text-[#0A244A]">Preço Venda (R$)</Label>
+                    <Input id="estimatedSalePrice" name="estimatedSalePrice" type="number" step="0.01" min="0" required />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label htmlFor="condition">Condição</Label>
-                    <select id="condition" name="condition" className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
-                      <option value="NOVA">Nova com etiqueta</option>
-                      <option value="EXCELENTE">Excelente estado</option>
-                      <option value="BOA">Bom estado</option>
-                      <option value="REGULAR">Sinais de uso</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="gender">Gênero</Label>
-                    <select id="gender" name="gender" className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
-                      <option value="UNISSEX">Unissex</option>
-                      <option value="FEMININO">Feminino</option>
-                      <option value="MASCULINO">Masculino</option>
-                      <option value="INFANTIL">Infantil</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label htmlFor="purchasePrice">Preço de Compra (R$)</Label>
-                    <Input id="purchasePrice" name="purchasePrice" type="number" step="0.01" placeholder="0.00" required />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="estimatedSalePrice">Preço de Venda (R$)</Label>
-                    <Input id="estimatedSalePrice" name="estimatedSalePrice" type="number" step="0.01" placeholder="0.00" required />
-                  </div>
-                </div>
-
-                <Button type="submit" className="w-full mt-2" disabled={loading}>
-                  {loading ? "Processando..." : "Salvar Peça"}
+                <Button type="submit" className="w-full mt-2 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white" disabled={loading}>
+                  {loading ? "A processar..." : "Salvar Peça na Arara"}
                 </Button>
               </form>
             </DialogContent>
@@ -233,12 +186,10 @@ export default function InventoryPage() {
       <div className="bg-white rounded-xl border border-zinc-200 shadow-sm overflow-hidden">
         {pieces.length === 0 ? (
           <div className="p-12 text-center flex flex-col items-center justify-center">
-            <Package className="w-12 h-12 text-zinc-300 mb-4" />
-            <h3 className="text-lg font-semibold text-zinc-900">Nenhuma peça no inventário</h3>
-            <p className="text-sm text-zinc-500 max-w-sm mt-1">
-              {!hasDeps 
-                ? "Clique em 'Carga Rápida de Teste' para gerar as dependências básicas estruturais do banco." 
-                : "Clique em 'Cadastrar Peça' para dar entrada no seu primeiro item de estoque."}
+            <Package className="w-12 h-12 text-[#1E5AA8]/30 mb-4" />
+            <h3 className="text-lg font-semibold text-[#0A244A]">Nenhuma peça na sua Arara</h3>
+            <p className="text-sm text-[#4B4B4B] max-w-sm mt-1">
+              Clique em &apos;Carga Rápida de Teste&apos; para gerar as categorias base e desbloquear o cadastro.
             </p>
           </div>
         ) : (
@@ -246,29 +197,35 @@ export default function InventoryPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>SKU</TableHead>
-                <TableHead>Nome</TableHead>
-                <TableHead>Categoria</TableHead>
-                <TableHead>Marca</TableHead>
-                <TableHead>Tam.</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead className="text-right">P. Venda</TableHead>
+                <TableHead>Produto</TableHead>
+                <TableHead>Lote</TableHead>
+                <TableHead className="text-center">Status</TableHead>
+                <TableHead className="text-right">Custo / Venda</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {pieces.map((piece) => (
                 <TableRow key={piece.id}>
-                  <TableCell className="font-medium text-zinc-600">{piece.code}</TableCell>
-                  <TableCell className="font-medium text-zinc-900">{piece.name}</TableCell>
-                  <TableCell>{piece.category.name}</TableCell>
-                  <TableCell>{piece.brand.name}</TableCell>
-                  <TableCell><Badge variant="secondary">{piece.size.name}</Badge></TableCell>
+                  <TableCell className="font-medium text-[#4B4B4B]">{piece.code}</TableCell>
                   <TableCell>
-                    <Badge className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-50 capitalize">
-                      {piece.status.toLowerCase()}
+                    <div className="flex flex-col">
+                      <span className="font-medium text-[#0A244A]">{piece.name}</span>
+                      <span className="text-xs text-[#4B4B4B]">{piece.brand.name} • {piece.category.name}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="text-[#4B4B4B] border-zinc-200">{piece.lot.code}</Badge>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-emerald-200">
+                      {piece.status}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right font-medium">
-                    {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(piece.estimatedSalePrice)}
+                  <TableCell className="text-right">
+                    <div className="flex flex-col">
+                      <span className="text-xs text-[#4B4B4B] line-through">{formatCurrency(piece.purchasePrice)}</span>
+                      <span className="font-medium text-[#1E5AA8]">{formatCurrency(piece.estimatedSalePrice)}</span>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
