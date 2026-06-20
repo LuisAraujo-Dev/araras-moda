@@ -8,8 +8,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Package, PlusCircle, Zap, Tag } from "lucide-react";
-import { getPiecesAction, seedTaxonomyAction, createPieceAction, getTaxonomyAction, quickAddCategory, quickAddBrand, quickAddSize, quickAddColor } from "@/app/actions/piece.actions";
+import { Package, PlusCircle, Zap, Tag, CheckCircle2, ArrowLeft } from "lucide-react";
+import { getPiecesAction, seedTaxonomyAction, createPieceAction, getTaxonomyAction, quickAddCategory, quickAddBrand, quickAddSize, quickAddColor, quickAddLot } from "@/app/actions/piece.actions";
 import { Category, Brand, Lot, Size, Color, Piece } from "@prisma/client";
 
 type PieceWithRelations = Piece & {
@@ -35,11 +35,16 @@ export default function InventoryPage() {
   const [taxonomy, setTaxonomy] = useState<TaxonomyData>({ categories: [], brands: [], lots: [], sizes: [], colors: [] });
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [banner, setBanner] = useState({ show: false, message: "", type: "" });
 
   const [catId, setCatId] = useState("");
   const [brandId, setBrandId] = useState("");
   const [sizeId, setSizeId] = useState("");
   const [colorId, setColorId] = useState("");
+  const [lotId, setLotId] = useState("");
+
+  const [quickAdd, setQuickAdd] = useState({ isOpen: false, type: "", label: "" });
+  const [quickAddValue, setQuickAddValue] = useState("");
 
   const loadData = async () => {
     const [piecesData, taxonomyData] = await Promise.all([
@@ -75,38 +80,50 @@ export default function InventoryPage() {
   const autoNameParts = [catName, brandName, sizeName ? `Tamanho ${sizeName}` : "", colorName].filter(Boolean);
   const autoName = hasSelection ? (autoNameParts.join(" ") || "Nova Peça") : "Selecione os atributos...";
 
+  const showBanner = (message: string, type: "success" | "error") => {
+    setBanner({ show: true, message, type });
+    setTimeout(() => setBanner({ show: false, message: "", type: "" }), 5000);
+  };
+
   async function handleSeed() {
     setLoading(true);
     const result = await seedTaxonomyAction(mockCompanyId);
     setLoading(false);
-    if (result.error) alert(result.error);
-    else {
-      alert("Sucesso! O sistema gerou categorias de teste.");
+    if (result.error) {
+      showBanner(result.error, "error");
+    } else {
+      showBanner("Categorias de teste geradas com sucesso!", "success");
       await loadData();
     }
   }
 
-  const handleQuickAdd = async (type: 'category' | 'brand' | 'size' | 'color') => {
-    const labels = { category: "Categoria", brand: "Marca", size: "Tamanho", color: "Cor" };
-    const newValue = window.prompt(`Digite o nome da nova ${labels[type]}:`);
-    
-    if (!newValue || newValue.trim() === "") return;
+  const triggerQuickAdd = (type: string, label: string) => {
+    setQuickAdd({ isOpen: true, type, label });
+    setQuickAddValue("");
+  };
+
+  const handleSaveQuickAdd = async () => {
+    if (!quickAddValue || quickAddValue.trim() === "") return;
     
     setLoading(true);
     let newRecord;
-    if (type === 'category') newRecord = await quickAddCategory(mockCompanyId, newValue);
-    if (type === 'brand') newRecord = await quickAddBrand(mockCompanyId, newValue);
-    if (type === 'size') newRecord = await quickAddSize(mockCompanyId, newValue);
-    if (type === 'color') newRecord = await quickAddColor(mockCompanyId, newValue);
+    
+    if (quickAdd.type === 'category') newRecord = await quickAddCategory(mockCompanyId, quickAddValue);
+    if (quickAdd.type === 'brand') newRecord = await quickAddBrand(mockCompanyId, quickAddValue);
+    if (quickAdd.type === 'size') newRecord = await quickAddSize(mockCompanyId, quickAddValue);
+    if (quickAdd.type === 'color') newRecord = await quickAddColor(mockCompanyId, quickAddValue);
+    if (quickAdd.type === 'lot') newRecord = await quickAddLot(mockCompanyId, quickAddValue);
     
     await loadData(); 
     
-    if (type === 'category' && newRecord) setCatId(newRecord.id);
-    if (type === 'brand' && newRecord) setBrandId(newRecord.id);
-    if (type === 'size' && newRecord) setSizeId(newRecord.id);
-    if (type === 'color' && newRecord) setColorId(newRecord.id);
+    if (quickAdd.type === 'category' && newRecord) setCatId(newRecord.id);
+    if (quickAdd.type === 'brand' && newRecord) setBrandId(newRecord.id);
+    if (quickAdd.type === 'size' && newRecord) setSizeId(newRecord.id);
+    if (quickAdd.type === 'color' && newRecord) setColorId(newRecord.id);
+    if (quickAdd.type === 'lot' && newRecord) setLotId(newRecord.id);
     
     setLoading(false);
+    setQuickAdd({ isOpen: false, type: "", label: "" });
   };
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -121,7 +138,7 @@ export default function InventoryPage() {
       sizeId: sizeId,
       colorId: colorId,
       condition: formData.get("condition") as string,
-      lotId: formData.get("lotId") as string,
+      lotId: lotId,
       purchasePrice: Number(formData.get("purchasePrice")),
     };
 
@@ -130,10 +147,11 @@ export default function InventoryPage() {
 
     if (result.success) {
       setOpen(false);
-      setCatId(""); setBrandId(""); setSizeId(""); setColorId("");
+      setCatId(""); setBrandId(""); setSizeId(""); setColorId(""); setLotId("");
+      showBanner("Peça cadastrada com sucesso!", "success");
       await loadData();
     } else {
-      alert(result.error);
+      showBanner(result.error || "Erro", "error");
     }
   }
 
@@ -141,8 +159,15 @@ export default function InventoryPage() {
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+    <div className="space-y-8 relative">
+      {banner.show && (
+        <div className={`absolute top-0 left-0 right-0 z-50 flex items-center gap-2 p-4 rounded-lg shadow-md transition-all ${banner.type === "success" ? "bg-emerald-50 text-emerald-800 border border-emerald-200" : "bg-red-50 text-red-800 border border-red-200"}`}>
+          <CheckCircle2 className="w-5 h-5" />
+          <span className="font-medium">{banner.message}</span>
+        </div>
+      )}
+
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-2">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-[#0A244A]">Minha Arara</h1>
           <p className="text-[#4B4B4B] mt-1">Gerencie as peças de vestuário e acompanhe o fluxo de estados.</p>
@@ -153,94 +178,123 @@ export default function InventoryPage() {
             <Zap className="w-4 h-4" /> Carga Rápida
           </Button>
 
-          <Dialog open={open} onOpenChange={setOpen}>
+          <Dialog open={open} onOpenChange={(val) => { setOpen(val); if (!val) setQuickAdd({ isOpen: false, type: "", label: "" }); }}>
             <DialogTrigger className={`flex items-center justify-center gap-2 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white transition-colors shadow-sm h-10 px-4 rounded-md text-sm font-medium ${taxonomy.categories.length === 0 ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}>
               <PlusCircle className="w-4 h-4" /> Cadastrar Peça
             </DialogTrigger>
             <DialogContent className="sm:max-w-150 max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle className="text-[#0A244A]">Cadastrar Nova Peça</DialogTitle>
-                <DialogDescription className="text-[#4B4B4B]">
-                  O nome e o código SKU serão gerados automaticamente.
-                </DialogDescription>
-              </DialogHeader>
               
-              <div className="bg-zinc-50 border border-zinc-200 rounded-lg p-3 flex items-center gap-3">
-                <div className="p-2 bg-white rounded shadow-sm"><Tag className="w-4 h-4 text-[#1E5AA8]" /></div>
-                <div>
-                  <p className="text-xs text-zinc-500 font-semibold uppercase tracking-wider">Nome Automático</p>
-                  <p className="text-[#0A244A] font-bold text-lg">{autoName}</p>
-                </div>
-              </div>
-
-              <form onSubmit={handleSubmit} className="space-y-5 pt-2">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label className="text-[#0A244A]">Categoria</Label>
-                    <select value={catId} onChange={(e) => e.target.value === "NEW" ? handleQuickAdd('category') : setCatId(e.target.value)} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
-                      <option value="">Selecione...</option>
-                      {taxonomy.categories.map((c: Category) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                      <option value="NEW" className="font-bold text-[#1E5AA8]">+ Cadastrar Nova Categoria</option>
-                    </select>
+              {quickAdd.isOpen ? (
+                <div className="space-y-6 py-4">
+                  <div className="flex items-center gap-2 mb-4">
+                    <button onClick={() => setQuickAdd({ isOpen: false, type: "", label: "" })} className="p-2 hover:bg-zinc-100 rounded-full transition-colors">
+                      <ArrowLeft className="w-5 h-5 text-zinc-600" />
+                    </button>
+                    <div>
+                      <DialogTitle className="text-[#0A244A]">Novo Cadastro</DialogTitle>
+                      <DialogDescription>Adicionar {quickAdd.label.toLowerCase()} ao sistema.</DialogDescription>
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <Label className="text-[#0A244A]">Marca</Label>
-                    <select value={brandId} onChange={(e) => e.target.value === "NEW" ? handleQuickAdd('brand') : setBrandId(e.target.value)} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
-                      <option value="">Selecione...</option>
-                      {taxonomy.brands.map((b: Brand) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                      <option value="NEW" className="font-bold text-[#1E5AA8]">+ Cadastrar Nova Marca</option>
-                    </select>
+                  
+                  <div className="space-y-2">
+                    <Label className="text-[#0A244A]">Nome da {quickAdd.label}</Label>
+                    <Input autoFocus value={quickAddValue} onChange={(e) => setQuickAddValue(e.target.value)} placeholder={`Ex: ${quickAdd.label === 'Origem' ? 'Brechó da Maria' : 'Azul Marinho'}`} />
+                  </div>
+
+                  <div className="flex gap-3">
+                    <Button onClick={handleSaveQuickAdd} className="flex-1 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white" disabled={loading || !quickAddValue}>
+                      {loading ? "A processar..." : "Salvar e Voltar"}
+                    </Button>
                   </div>
                 </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label className="text-[#0A244A]">Tamanho</Label>
-                    <select value={sizeId} onChange={(e) => e.target.value === "NEW" ? handleQuickAdd('size') : setSizeId(e.target.value)} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
-                      <option value="">Selecione...</option>
-                      {taxonomy.sizes.map((s: Size) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                      <option value="NEW" className="font-bold text-[#1E5AA8]">+ Cadastrar Novo Tamanho</option>
-                    </select>
+              ) : (
+                <>
+                  <DialogHeader>
+                    <DialogTitle className="text-[#0A244A]">Cadastrar Nova Peça</DialogTitle>
+                    <DialogDescription className="text-[#4B4B4B]">
+                      O nome e o código SKU serão gerados automaticamente.
+                    </DialogDescription>
+                  </DialogHeader>
+                  
+                  <div className="bg-zinc-50 border border-zinc-200 rounded-lg p-3 flex items-center gap-3 mt-2">
+                    <div className="p-2 bg-white rounded shadow-sm"><Tag className="w-4 h-4 text-[#1E5AA8]" /></div>
+                    <div>
+                      <p className="text-xs text-zinc-500 font-semibold uppercase tracking-wider">Nome Automático</p>
+                      <p className="text-[#0A244A] font-bold text-lg leading-tight">{autoName}</p>
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <Label className="text-[#0A244A]">Cor</Label>
-                    <select value={colorId} onChange={(e) => e.target.value === "NEW" ? handleQuickAdd('color') : setColorId(e.target.value)} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
-                      <option value="">Selecione...</option>
-                      {taxonomy.colors.map((c: Color) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                      <option value="NEW" className="font-bold text-[#1E5AA8]">+ Cadastrar Nova Cor</option>
-                    </select>
-                  </div>
-                </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label htmlFor="lotId" className="text-[#0A244A]">Lote Origem</Label>
-                    <select id="lotId" name="lotId" className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
-                      <option value="">Selecione...</option>
-                      {taxonomy.lots.map((l: Lot) => <option key={l.id} value={l.id}>{l.code}</option>)}
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="purchasePrice" className="text-[#0A244A]">Custo / Compra (R$)</Label>
-                    <Input id="purchasePrice" name="purchasePrice" type="number" step="0.01" min="0" required />
-                  </div>
-                </div>
+                  <form onSubmit={handleSubmit} className="space-y-5 pt-2">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <Label className="text-[#0A244A]">Categoria</Label>
+                        <select value={catId} onChange={(e) => e.target.value === "NEW" ? triggerQuickAdd('category', 'Categoria') : setCatId(e.target.value)} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
+                          <option value="">Selecione...</option>
+                          {taxonomy.categories.map((c: Category) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                          <option value="NEW" className="font-bold text-[#1E5AA8]">+ Cadastrar Nova Categoria</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[#0A244A]">Marca</Label>
+                        <select value={brandId} onChange={(e) => e.target.value === "NEW" ? triggerQuickAdd('brand', 'Marca') : setBrandId(e.target.value)} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
+                          <option value="">Selecione...</option>
+                          {taxonomy.brands.map((b: Brand) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                          <option value="NEW" className="font-bold text-[#1E5AA8]">+ Cadastrar Nova Marca</option>
+                        </select>
+                      </div>
+                    </div>
 
-                <div className="space-y-1">
-                  <Label htmlFor="condition" className="text-[#0A244A]">Observações / Condição (Opcional)</Label>
-                  <Input id="condition" name="condition" placeholder="Ex: Fio puxado na manga, Peça nova com etiqueta..." />
-                </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <Label className="text-[#0A244A]">Tamanho</Label>
+                        <select value={sizeId} onChange={(e) => e.target.value === "NEW" ? triggerQuickAdd('size', 'Tamanho') : setSizeId(e.target.value)} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
+                          <option value="">Selecione...</option>
+                          {taxonomy.sizes.map((s: Size) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                          <option value="NEW" className="font-bold text-[#1E5AA8]">+ Cadastrar Novo Tamanho</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[#0A244A]">Cor</Label>
+                        <select value={colorId} onChange={(e) => e.target.value === "NEW" ? triggerQuickAdd('color', 'Cor') : setColorId(e.target.value)} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
+                          <option value="">Selecione...</option>
+                          {taxonomy.colors.map((c: Color) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                          <option value="NEW" className="font-bold text-[#1E5AA8]">+ Cadastrar Nova Cor</option>
+                        </select>
+                      </div>
+                    </div>
 
-                <Button type="submit" className="w-full mt-4 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white h-11" disabled={loading}>
-                  {loading ? "A processar..." : "Salvar Peça na Arara"}
-                </Button>
-              </form>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <Label className="text-[#0A244A]">Origem (Fornecedor)</Label>
+                        <select value={lotId} onChange={(e) => e.target.value === "NEW" ? triggerQuickAdd('lot', 'Origem') : setLotId(e.target.value)} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
+                          <option value="">Selecione...</option>
+                          {taxonomy.lots.map((l: Lot) => <option key={l.id} value={l.id}>{l.sourceName} ({l.code})</option>)}
+                          <option value="NEW" className="font-bold text-[#1E5AA8]">+ Cadastrar Nova Origem</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="purchasePrice" className="text-[#0A244A]">Custo / Compra (R$)</Label>
+                        <Input id="purchasePrice" name="purchasePrice" type="number" step="0.01" min="0" required />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label htmlFor="condition" className="text-[#0A244A]">Observações (Opcional)</Label>
+                      <Input id="condition" name="condition" placeholder="Ex: Fio puxado, Peça nova com etiqueta..." />
+                    </div>
+
+                    <Button type="submit" className="w-full mt-4 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white h-11" disabled={loading}>
+                      {loading ? "A processar..." : "Salvar Peça na Arara"}
+                    </Button>
+                  </form>
+                </>
+              )}
             </DialogContent>
           </Dialog>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-zinc-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl border border-zinc-200 shadow-sm overflow-hidden mt-6">
         {pieces.length === 0 ? (
           <div className="p-12 text-center flex flex-col items-center justify-center">
             <Package className="w-12 h-12 text-[#1E5AA8]/30 mb-4" />
@@ -254,7 +308,7 @@ export default function InventoryPage() {
                 <TableHead>SKU</TableHead>
                 <TableHead>Produto</TableHead>
                 <TableHead>Detalhes</TableHead>
-                <TableHead>Custo</TableHead>
+                <TableHead className="text-right">Custo</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -264,16 +318,18 @@ export default function InventoryPage() {
                   <TableCell>
                     <div className="flex flex-col">
                       <span className="font-medium text-[#0A244A]">{piece.name}</span>
-                      <span className="text-xs text-zinc-500">{piece.lot?.code}</span>
+                      <span className="text-xs text-zinc-500 truncate max-w-50" title={piece.lot?.sourceName}>
+                        Origem: {piece.lot?.sourceName}
+                      </span>
                     </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-2">
-                      <Badge variant="secondary" className="bg-zinc-100">{piece.size?.name}</Badge>
-                      <Badge variant="secondary" className="bg-zinc-100">{piece.color?.name}</Badge>
+                      <Badge variant="secondary" className="bg-zinc-100 border-zinc-200">{piece.size?.name}</Badge>
+                      <Badge variant="secondary" className="bg-zinc-100 border-zinc-200">{piece.color?.name}</Badge>
                     </div>
                   </TableCell>
-                  <TableCell className="font-medium text-[#1E5AA8]">
+                  <TableCell className="font-medium text-[#1E5AA8] text-right">
                     {formatCurrency(piece.purchasePrice)}
                   </TableCell>
                 </TableRow>

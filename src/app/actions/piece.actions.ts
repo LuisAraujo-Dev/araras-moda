@@ -11,7 +11,6 @@ async function getRealCompanyId(providedId: string) {
   return company?.id || providedId;
 }
 
-// Geração de Taxonomia de Teste
 export async function seedTaxonomyAction(companyId: string) {
   try {
     const realId = await getRealCompanyId(companyId);
@@ -39,12 +38,11 @@ export async function seedTaxonomyAction(companyId: string) {
     revalidatePath("/dashboard/inventory");
     return { success: true };
   } catch (error) {
-    console.error("Erro no seed:", error);
+    console.error(error);
     return { error: "Falha ao gerar dados de taxonomia." };
   }
 }
 
-// Buscar Peças
 export async function getPiecesAction(companyId: string) {
   try {
     const realId = await getRealCompanyId(companyId);
@@ -59,7 +57,6 @@ export async function getPiecesAction(companyId: string) {
   }
 }
 
-// Buscar Todas as Opções (Categorias, Marcas, Lotes, Tamanhos e Cores) limitando às mais recentes
 export async function getTaxonomyAction(companyId: string) {
   try {
     const realId = await getRealCompanyId(companyId);
@@ -77,7 +74,6 @@ export async function getTaxonomyAction(companyId: string) {
   }
 }
 
-// --- AÇÕES RÁPIDAS PARA O "CADASTRAR NOVA OPÇÃO" ---
 export async function quickAddCategory(companyId: string, name: string) {
   const realId = await getRealCompanyId(companyId);
   return prisma.category.create({ data: { name, companyId: realId } });
@@ -94,8 +90,23 @@ export async function quickAddColor(companyId: string, name: string) {
   const realId = await getRealCompanyId(companyId);
   return prisma.color.create({ data: { name, companyId: realId } });
 }
+export async function quickAddLot(companyId: string, name: string) {
+  const realId = await getRealCompanyId(companyId);
+  const code = name.toUpperCase().replace(/\s+/g, '-').substring(0, 15) + `-${Math.floor(Math.random() * 1000)}`;
+  
+  return prisma.lot.create({
+    data: {
+      code: code,
+      purchaseDate: new Date(),
+      sourceName: name,
+      sourceType: SourceType.OUTRO,
+      totalCost: 0,
+      quantity: 1,
+      companyId: realId,
+    } as Prisma.LotUncheckedCreateInput,
+  });
+}
 
-// --- CRIAÇÃO DA PEÇA AUTOMATIZADA ---
 type CreatePieceInput = {
   name: string;
   categoryId: string;
@@ -111,7 +122,6 @@ export async function createPieceAction(companyId: string, data: CreatePieceInpu
   try {
     const realId = await getRealCompanyId(companyId);
     
-    // Gera um SKU Automático Ex: AM-847392
     const autoCode = `AM-${Math.floor(100000 + Math.random() * 900000)}`;
     const autoQrCode = `QR-${autoCode}`;
 
@@ -125,10 +135,10 @@ export async function createPieceAction(companyId: string, data: CreatePieceInpu
         sizeId: data.sizeId,
         colorId: data.colorId,
         condition: data.condition,
-        gender: "UNISSEX", // Padrão automático para não travar o banco
+        gender: "UNISSEX",
         lotId: data.lotId,
         purchasePrice: data.purchasePrice,
-        estimatedSalePrice: 0, // Preço de venda zerado por padrão na entrada
+        estimatedSalePrice: 0,
         status: PieceStatus.ESTOQUE,
         companyId: realId,
       } as Prisma.PieceUncheckedCreateInput,
@@ -136,7 +146,7 @@ export async function createPieceAction(companyId: string, data: CreatePieceInpu
     revalidatePath("/dashboard/inventory");
     return { success: true };
   } catch (error) {
-    console.error("Erro na criacao:", error);
+    console.error(error);
     return { error: "Falha ao cadastrar a peça. Verifique os dados." };
   }
 }
