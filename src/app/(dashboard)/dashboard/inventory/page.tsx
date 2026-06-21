@@ -8,9 +8,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Package, PlusCircle, Zap, Tag, CheckCircle2, ArrowLeft, AlertCircle, Filter, Pencil, Trash2 } from "lucide-react";
-import { getPiecesAction, seedTaxonomyAction, createPieceAction, updatePieceAction, deletePieceAction, getTaxonomyAction, quickAddCategory, quickAddBrand, quickAddSize, quickAddColor, quickAddLot } from "@/app/actions/piece.actions";
-import { Category, Brand, Lot, Size, Color, Piece } from "@prisma/client";
+import { Package, PlusCircle, Zap, Tag, CheckCircle2, ArrowLeft, AlertCircle, Filter, Pencil, Trash2, Store } from "lucide-react";
+import { getPiecesAction, seedTaxonomyAction, createPieceAction, updatePieceAction, deletePieceAction, getTaxonomyAction, quickAddCategory, quickAddBrand, quickAddSize, quickAddColor, quickAddLot, quickAddStore } from "@/app/actions/piece.actions";
+import { Category, Brand, Lot, Size, Color, Piece, Store as StoreModel } from "@prisma/client";
 
 type PieceWithRelations = Piece & {
   category: Category;
@@ -18,6 +18,7 @@ type PieceWithRelations = Piece & {
   lot: Lot;
   size: Size | null;
   color: Color | null;
+  store: StoreModel | null;
   tags: string[];
   observations: string | null;
 };
@@ -28,6 +29,7 @@ type TaxonomyData = {
   lots: Lot[];
   sizes: Size[];
   colors: Color[];
+  stores: StoreModel[];
 };
 
 const TAG_COLORS: Record<string, string> = {
@@ -48,7 +50,7 @@ export default function InventoryPage() {
   const mockCompanyId = "company-placeholder-id";
 
   const [pieces, setPieces] = useState<PieceWithRelations[]>([]);
-  const [taxonomy, setTaxonomy] = useState<TaxonomyData>({ categories: [], brands: [], lots: [], sizes: [], colors: [] });
+  const [taxonomy, setTaxonomy] = useState<TaxonomyData>({ categories: [], brands: [], lots: [], sizes: [], colors: [], stores: [] });
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [banner, setBanner] = useState({ show: false, message: "", type: "" });
@@ -61,12 +63,15 @@ export default function InventoryPage() {
   const [sizeId, setSizeId] = useState("");
   const [colorId, setColorId] = useState("");
   const [lotId, setLotId] = useState("");
+  const [storeId, setStoreId] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   
   const [filterTags, setFilterTags] = useState<string[]>([]);
 
   const [quickAdd, setQuickAdd] = useState({ isOpen: false, type: "", label: "" });
   const [quickAddValue, setQuickAddValue] = useState("");
+
+  const isConsigned = selectedTags.includes("Em consignação");
 
   const loadData = async () => {
     const [piecesData, taxonomyData] = await Promise.all([
@@ -135,6 +140,7 @@ export default function InventoryPage() {
     if (quickAdd.type === 'size') newRecord = await quickAddSize(mockCompanyId, quickAddValue);
     if (quickAdd.type === 'color') newRecord = await quickAddColor(mockCompanyId, quickAddValue);
     if (quickAdd.type === 'lot') newRecord = await quickAddLot(mockCompanyId, quickAddValue);
+    if (quickAdd.type === 'store') newRecord = await quickAddStore(mockCompanyId, quickAddValue);
     
     await loadData(); 
     
@@ -143,6 +149,7 @@ export default function InventoryPage() {
     if (quickAdd.type === 'size' && newRecord) setSizeId(newRecord.id);
     if (quickAdd.type === 'color' && newRecord) setColorId(newRecord.id);
     if (quickAdd.type === 'lot' && newRecord) setLotId(newRecord.id);
+    if (quickAdd.type === 'store' && newRecord) setStoreId(newRecord.id);
     
     setLoading(false);
     setQuickAdd({ isOpen: false, type: "", label: "" });
@@ -163,6 +170,7 @@ export default function InventoryPage() {
     setSizeId(piece.sizeId || "");
     setColorId(piece.colorId || "");
     setLotId(piece.lotId);
+    setStoreId(piece.storeId || "");
     setSelectedTags(piece.tags || []);
     setOpen(true);
   };
@@ -172,7 +180,7 @@ export default function InventoryPage() {
     if (!val) {
       setEditingPiece(null);
       setQuickAdd({ isOpen: false, type: "", label: "" });
-      setCatId(""); setBrandId(""); setSizeId(""); setColorId(""); setLotId(""); setSelectedTags([]);
+      setCatId(""); setBrandId(""); setSizeId(""); setColorId(""); setLotId(""); setStoreId(""); setSelectedTags([]);
     }
   };
 
@@ -190,6 +198,7 @@ export default function InventoryPage() {
       tags: selectedTags,
       observations: formData.get("observations") as string,
       lotId: lotId,
+      storeId: isConsigned ? (storeId || null) : null,
       purchasePrice: Number(formData.get("purchasePrice")),
     };
 
@@ -273,7 +282,7 @@ export default function InventoryPage() {
                   </div>
                   
                   <div className="space-y-2">
-                    <Label className="text-[#0A244A]">Nome da {quickAdd.label}</Label>
+                    <Label className="text-[#0A244A]">Nome {quickAdd.type === 'store' ? 'do' : 'da'} {quickAdd.label}</Label>
                     <Input autoFocus value={quickAddValue} onChange={(e) => setQuickAddValue(e.target.value)} placeholder={`Ex: ${quickAdd.label === 'Origem' ? 'Brechó da Maria' : 'Azul Marinho'}`} />
                   </div>
 
@@ -376,6 +385,19 @@ export default function InventoryPage() {
                           </button>
                         ))}
                       </div>
+                      
+                      {isConsigned && (
+                        <div className="pt-4 border-t border-zinc-200 mt-4 animate-in slide-in-from-top-2">
+                          <Label className="text-purple-900 mb-2 block flex items-center gap-2">
+                            <Store className="w-4 h-4" /> Parceiro (Local de Consignação)
+                          </Label>
+                          <select value={storeId} onChange={(e) => e.target.value === "NEW" ? triggerQuickAdd('store', 'Parceiro') : setStoreId(e.target.value)} className="w-full h-10 px-3 rounded-md border border-purple-200 bg-purple-50 text-sm focus:ring-purple-500" required={isConsigned}>
+                            <option value="">Onde a peça está consignada?</option>
+                            {taxonomy.stores.map((st: StoreModel) => <option key={st.id} value={st.id}>{st.name}</option>)}
+                            <option value="NEW" className="font-bold text-purple-700">+ Cadastrar Novo Parceiro</option>
+                          </select>
+                        </div>
+                      )}
                     </div>
 
                     <div className="space-y-1">
@@ -477,6 +499,11 @@ export default function InventoryPage() {
                       {piece.observations && (
                         <span className="text-xs text-amber-600 mt-1 flex items-center gap-1">
                           <AlertCircle className="w-3 h-3" /> {piece.observations}
+                        </span>
+                      )}
+                      {piece.store && piece.tags.includes("Em consignação") && (
+                        <span className="text-xs text-purple-700 mt-0.5 flex items-center gap-1 font-medium">
+                          <Store className="w-3 h-3" /> Em {piece.store.name}
                         </span>
                       )}
                     </div>

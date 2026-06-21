@@ -22,6 +22,7 @@ export async function seedTaxonomyAction(companyId: string) {
     await prisma.brand.create({ data: { name: "Gucci", companyId: realId } });
     await prisma.size.create({ data: { name: "40", companyId: realId } });
     await prisma.color.create({ data: { name: "Preta", companyId: realId } });
+    await prisma.store.create({ data: { name: "Peça Rara Gama", commissionPercentage: 50, companyId: realId } });
     
     await prisma.lot.create({
       data: {
@@ -48,7 +49,7 @@ export async function getPiecesAction(companyId: string) {
     const realId = await getRealCompanyId(companyId);
     return await prisma.piece.findMany({
       where: { companyId: realId },
-      include: { category: true, brand: true, lot: true, size: true, color: true },
+      include: { category: true, brand: true, lot: true, size: true, color: true, store: true },
       orderBy: { createdAt: "desc" },
     });
   } catch (error) {
@@ -60,17 +61,18 @@ export async function getPiecesAction(companyId: string) {
 export async function getTaxonomyAction(companyId: string) {
   try {
     const realId = await getRealCompanyId(companyId);
-    const [categories, brands, lots, sizes, colors] = await Promise.all([
+    const [categories, brands, lots, sizes, colors, stores] = await Promise.all([
       prisma.category.findMany({ where: { companyId: realId }, take: 15, orderBy: { name: 'asc' } }),
       prisma.brand.findMany({ where: { companyId: realId }, take: 15, orderBy: { name: 'asc' } }),
       prisma.lot.findMany({ where: { companyId: realId }, take: 15, orderBy: { createdAt: 'desc' } }),
       prisma.size.findMany({ where: { companyId: realId }, take: 15, orderBy: { name: 'asc' } }),
       prisma.color.findMany({ where: { companyId: realId }, take: 15, orderBy: { name: 'asc' } }),
+      prisma.store.findMany({ where: { companyId: realId }, take: 15, orderBy: { name: 'asc' } }),
     ]);
-    return { categories, brands, lots, sizes, colors };
+    return { categories, brands, lots, sizes, colors, stores };
   } catch (error) {
     console.error(error);
-    return { categories: [], brands: [], lots: [], sizes: [], colors: [] };
+    return { categories: [], brands: [], lots: [], sizes: [], colors: [], stores: [] };
   }
 }
 
@@ -89,6 +91,10 @@ export async function quickAddSize(companyId: string, name: string) {
 export async function quickAddColor(companyId: string, name: string) {
   const realId = await getRealCompanyId(companyId);
   return prisma.color.create({ data: { name, companyId: realId } });
+}
+export async function quickAddStore(companyId: string, name: string) {
+  const realId = await getRealCompanyId(companyId);
+  return prisma.store.create({ data: { name, commissionPercentage: 50, companyId: realId } });
 }
 export async function quickAddLot(companyId: string, name: string) {
   const realId = await getRealCompanyId(companyId);
@@ -116,6 +122,7 @@ type CreatePieceInput = {
   tags: string[];
   observations: string;
   lotId: string;
+  storeId: string | null;
   purchasePrice: number;
 };
 
@@ -138,6 +145,7 @@ export async function createPieceAction(companyId: string, data: CreatePieceInpu
         observations: data.observations,
         gender: "UNISSEX",
         lotId: data.lotId,
+        storeId: data.storeId,
         purchasePrice: data.purchasePrice,
         estimatedSalePrice: 0,
         status: PieceStatus.ESTOQUE,
@@ -166,6 +174,7 @@ export async function updatePieceAction(pieceId: string, companyId: string, data
         tags: data.tags,
         observations: data.observations,
         lotId: data.lotId,
+        storeId: data.storeId,
         purchasePrice: data.purchasePrice,
       },
     });
