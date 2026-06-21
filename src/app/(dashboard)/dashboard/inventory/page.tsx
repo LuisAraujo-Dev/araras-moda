@@ -8,9 +8,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Package, PlusCircle, Zap, Tag, CheckCircle2, ArrowLeft, AlertCircle } from "lucide-react";
+import { Package, PlusCircle, Zap, Tag, CheckCircle2, ArrowLeft, AlertCircle, Filter } from "lucide-react";
 import { getPiecesAction, seedTaxonomyAction, createPieceAction, getTaxonomyAction, quickAddCategory, quickAddBrand, quickAddSize, quickAddColor, quickAddLot } from "@/app/actions/piece.actions";
-import { Category, Brand, Lot, Size, Color, Piece, PieceCondition } from "@prisma/client";
+import { Category, Brand, Lot, Size, Color, Piece } from "@prisma/client";
 
 type PieceWithRelations = Piece & {
   category: Category;
@@ -18,6 +18,8 @@ type PieceWithRelations = Piece & {
   lot: Lot;
   size: Size | null;
   color: Color | null;
+  tags: string[];
+  observations: string | null;
 };
 
 type TaxonomyData = {
@@ -26,14 +28,27 @@ type TaxonomyData = {
   lots: Lot[];
   sizes: Size[];
   colors: Color[];
-  conditions: string[];
 };
+
+const TAG_COLORS: Record<string, string> = {
+  "Higienização": "bg-cyan-100 text-cyan-800 border-cyan-200 hover:bg-cyan-200",
+  "Conserto": "bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-200",
+  "Em consignação": "bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-200",
+  "Postada": "bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200",
+  "Em estoque": "bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-200",
+  "Para doação": "bg-teal-100 text-teal-800 border-teal-200 hover:bg-teal-200",
+  "Doada": "bg-zinc-200 text-zinc-800 border-zinc-300 hover:bg-zinc-300",
+  "Vendida": "bg-lime-100 text-lime-800 border-lime-200 hover:bg-lime-200",
+  "Descartada": "bg-rose-100 text-rose-800 border-rose-200 hover:bg-rose-200",
+};
+
+const AVAILABLE_TAGS = Object.keys(TAG_COLORS);
 
 export default function InventoryPage() {
   const mockCompanyId = "company-placeholder-id";
 
   const [pieces, setPieces] = useState<PieceWithRelations[]>([]);
-  const [taxonomy, setTaxonomy] = useState<TaxonomyData>({ categories: [], brands: [], lots: [], sizes: [], colors: [], conditions: [] });
+  const [taxonomy, setTaxonomy] = useState<TaxonomyData>({ categories: [], brands: [], lots: [], sizes: [], colors: [] });
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [banner, setBanner] = useState({ show: false, message: "", type: "" });
@@ -43,6 +58,9 @@ export default function InventoryPage() {
   const [sizeId, setSizeId] = useState("");
   const [colorId, setColorId] = useState("");
   const [lotId, setLotId] = useState("");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  
+  const [filterTags, setFilterTags] = useState<string[]>([]);
 
   const [quickAdd, setQuickAdd] = useState({ isOpen: false, type: "", label: "" });
   const [quickAddValue, setQuickAddValue] = useState("");
@@ -127,6 +145,14 @@ export default function InventoryPage() {
     setQuickAdd({ isOpen: false, type: "", label: "" });
   };
 
+  const toggleTag = (tag: string) => {
+    setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
+  };
+
+  const toggleFilterTag = (tag: string) => {
+    setFilterTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
+  };
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
@@ -138,7 +164,8 @@ export default function InventoryPage() {
       brandId: brandId,
       sizeId: sizeId,
       colorId: colorId,
-      condition: formData.get("condition") as PieceCondition,
+      tags: selectedTags,
+      observations: formData.get("observations") as string,
       lotId: lotId,
       purchasePrice: Number(formData.get("purchasePrice")),
     };
@@ -148,7 +175,7 @@ export default function InventoryPage() {
 
     if (result.success) {
       setOpen(false);
-      setCatId(""); setBrandId(""); setSizeId(""); setColorId(""); setLotId("");
+      setCatId(""); setBrandId(""); setSizeId(""); setColorId(""); setLotId(""); setSelectedTags([]);
       showBanner("Peça guardada com sucesso!", "success");
       await loadData();
     } else {
@@ -158,6 +185,11 @@ export default function InventoryPage() {
 
   const formatCurrency = (val: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
+
+  const filteredPieces = pieces.filter(piece => {
+    if (filterTags.length === 0) return true;
+    return filterTags.some(tag => piece.tags.includes(tag));
+  });
 
   return (
     <div className="space-y-8 relative">
@@ -171,7 +203,7 @@ export default function InventoryPage() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-2">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-[#0A244A]">Minha Arara</h1>
-          <p className="text-[#4B4B4B] mt-1">Gerencie as peças de vestuário e acompanhe o fluxo de estados.</p>
+          <p className="text-[#4B4B4B] mt-1">Gerencie as peças de vestuário e acompanhe o fluxo através de etiquetas.</p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -179,16 +211,16 @@ export default function InventoryPage() {
             <Zap className="w-4 h-4" /> Carga Rápida
           </Button>
 
-          <Dialog open={open} onOpenChange={(val) => { setOpen(val); if (!val) setQuickAdd({ isOpen: false, type: "", label: "" }); }}>
+          <Dialog open={open} onOpenChange={(val) => { setOpen(val); if (!val) { setQuickAdd({ isOpen: false, type: "", label: "" }); setSelectedTags([]); } }}>
             <DialogTrigger className={`flex items-center justify-center gap-2 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white transition-colors shadow-sm h-10 px-4 rounded-md text-sm font-medium ${taxonomy.categories.length === 0 ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}>
               <PlusCircle className="w-4 h-4" /> Cadastrar Peça
             </DialogTrigger>
-            <DialogContent className="sm:max-w-150 max-h-[90vh] overflow-y-auto">
+            <DialogContent className="sm:max-w-162.5 max-h-[90vh] overflow-y-auto">
               
               {quickAdd.isOpen ? (
                 <div className="space-y-6 py-4">
                   <div className="flex items-center gap-2 mb-4">
-                    <button onClick={() => setQuickAdd({ isOpen: false, type: "", label: "" })} className="p-2 hover:bg-zinc-100 rounded-full transition-colors">
+                    <button onClick={() => setQuickAdd({ isOpen: false, type: "", label: "" })} className="p-2 hover:bg-zinc-100 rounded-full transition-colors cursor-pointer">
                       <ArrowLeft className="w-5 h-5 text-zinc-600" />
                     </button>
                     <div>
@@ -225,7 +257,7 @@ export default function InventoryPage() {
                     </div>
                   </div>
 
-                  <form onSubmit={handleSubmit} className="space-y-5 pt-2">
+                  <form onSubmit={handleSubmit} className="space-y-6 pt-2">
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1">
                         <Label className="text-[#0A244A]">Categoria</Label>
@@ -279,24 +311,35 @@ export default function InventoryPage() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <Label className="text-[#0A244A]">Condição da Peça</Label>
-                        <select id="condition" name="condition" className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
-                          <option value="">Selecione...</option>
-                          {taxonomy.conditions.map((cond) => (
-                            <option key={cond} value={cond}>{cond.replace(/_/g, ' ')}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="space-y-1">
-                        <Label htmlFor="observations" className="text-[#0A244A]">Observações (Opcional)</Label>
-                        <Input id="observations" name="observations" placeholder="Ex: Fio puxado, sem etiqueta..." />
+                    <div className="space-y-3 bg-zinc-50/50 border border-zinc-200 rounded-lg p-4">
+                      <Label className="text-[#0A244A] flex items-center gap-2">
+                        <Tag className="w-4 h-4" /> Etiquetas de Acompanhamento
+                      </Label>
+                      <div className="flex flex-wrap gap-2">
+                        {AVAILABLE_TAGS.map(tag => (
+                          <button
+                            type="button"
+                            key={tag}
+                            onClick={() => toggleTag(tag)}
+                            className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-all cursor-pointer ${
+                              selectedTags.includes(tag) 
+                                ? TAG_COLORS[tag] 
+                                : "bg-white text-zinc-500 border-zinc-200 hover:bg-zinc-100"
+                            }`}
+                          >
+                            {tag}
+                          </button>
+                        ))}
                       </div>
                     </div>
 
-                    <Button type="submit" className="w-full mt-4 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white h-11" disabled={loading}>
-                      {loading ? "A processar..." : "Guardar a Peça na Arara"}
+                    <div className="space-y-1">
+                      <Label htmlFor="observations" className="text-[#0A244A]">Observações (Opcional)</Label>
+                      <Input id="observations" name="observations" placeholder="Ex: Fio puxado na manga direita..." />
+                    </div>
+
+                    <Button type="submit" className="w-full mt-4 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white h-11 text-base shadow-sm" disabled={loading}>
+                      {loading ? "A processar..." : "Guardar Peça na Arara"}
                     </Button>
                   </form>
                 </>
@@ -307,38 +350,83 @@ export default function InventoryPage() {
       </div>
 
       <div className="bg-white rounded-xl border border-zinc-200 shadow-sm overflow-hidden mt-6">
-        {pieces.length === 0 ? (
-          <div className="p-12 text-center flex flex-col items-center justify-center">
+        {pieces.length > 0 && (
+          <div className="p-4 border-b border-zinc-200 bg-zinc-50/50 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <span className="text-sm font-semibold text-zinc-500 flex items-center gap-2">
+              <Filter className="w-4 h-4" /> Filtrar por:
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {AVAILABLE_TAGS.map(tag => (
+                <button
+                  type="button"
+                  key={tag}
+                  onClick={() => toggleFilterTag(tag)}
+                  className={`px-3 py-1 text-xs font-medium rounded-full border transition-all cursor-pointer ${
+                    filterTags.includes(tag) 
+                      ? TAG_COLORS[tag] 
+                      : "bg-white text-zinc-500 border-zinc-200 hover:bg-zinc-100 opacity-70 hover:opacity-100"
+                  }`}
+                >
+                  {tag}
+                </button>
+              ))}
+              {filterTags.length > 0 && (
+                <button onClick={() => setFilterTags([])} className="px-3 py-1 text-xs font-medium text-zinc-500 hover:text-[#0A244A] cursor-pointer">
+                  Limpar Filtros
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {filteredPieces.length === 0 ? (
+          <div className="p-16 text-center flex flex-col items-center justify-center">
             <Package className="w-12 h-12 text-[#1E5AA8]/30 mb-4" />
-            <h3 className="text-lg font-semibold text-[#0A244A]">Nenhuma peça na sua Arara</h3>
-            <p className="text-sm text-[#4B4B4B] max-w-sm mt-1">Clique em &apos;Carga Rápida&apos; para gerar os atributos base e começar.</p>
+            <h3 className="text-lg font-semibold text-[#0A244A]">
+              {pieces.length === 0 ? "Nenhuma peça na sua Arara" : "Nenhuma peça encontrada com estas etiquetas"}
+            </h3>
+            <p className="text-sm text-[#4B4B4B] max-w-sm mt-1">
+              {pieces.length === 0 ? "Clique em 'Carga Rápida' para gerar os atributos base e começar." : "Tente remover alguns filtros para ver mais resultados."}
+            </p>
           </div>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>SKU</TableHead>
+                <TableHead className="w-30">SKU</TableHead>
                 <TableHead>Produto</TableHead>
-                <TableHead>Detalhes</TableHead>
+                <TableHead>Etiquetas</TableHead>
                 <TableHead className="text-right">Custo</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {pieces.map((piece) => (
+              {filteredPieces.map((piece) => (
                 <TableRow key={piece.id}>
-                  <TableCell className="font-medium text-[#4B4B4B]">{piece.code}</TableCell>
+                  <TableCell className="font-medium text-[#4B4B4B] text-xs">{piece.code}</TableCell>
                   <TableCell>
                     <div className="flex flex-col">
                       <span className="font-medium text-[#0A244A]">{piece.name}</span>
-                      <span className="text-xs text-zinc-500 truncate max-w-50" title={piece.lot?.sourceName}>
+                      <span className="text-xs text-zinc-500 truncate max-w-62.5">
                         Origem: {piece.lot?.sourceName}
                       </span>
+                      {piece.observations && (
+                        <span className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3" /> {piece.observations}
+                        </span>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="flex gap-2">
-                      <Badge variant="secondary" className="bg-zinc-100 border-zinc-200">{piece.size?.name}</Badge>
-                      <Badge variant="secondary" className="bg-zinc-100 border-zinc-200">{piece.color?.name}</Badge>
+                    <div className="flex flex-wrap gap-1.5 max-w-75">
+                      {piece.tags && piece.tags.length > 0 ? (
+                        piece.tags.map(tag => (
+                          <Badge key={tag} className={`font-normal px-2 py-0.5 text-[10px] ${TAG_COLORS[tag] || "bg-zinc-100 text-zinc-800"}`}>
+                            {tag}
+                          </Badge>
+                        ))
+                      ) : (
+                        <span className="text-xs text-zinc-400 italic">Sem etiquetas</span>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell className="font-medium text-[#1E5AA8] text-right">

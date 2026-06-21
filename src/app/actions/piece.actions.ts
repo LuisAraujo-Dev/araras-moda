@@ -3,7 +3,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { PieceStatus, Prisma, SourceType, PieceCondition } from "@prisma/client";
+import { PieceStatus, Prisma, SourceType } from "@prisma/client";
 
 async function getRealCompanyId(providedId: string) {
   if (providedId !== "company-placeholder-id") return providedId;
@@ -67,17 +67,10 @@ export async function getTaxonomyAction(companyId: string) {
       prisma.size.findMany({ where: { companyId: realId }, take: 15, orderBy: { name: 'asc' } }),
       prisma.color.findMany({ where: { companyId: realId }, take: 15, orderBy: { name: 'asc' } }),
     ]);
-    return { 
-      categories, 
-      brands, 
-      lots, 
-      sizes, 
-      colors, 
-      conditions: Object.values(PieceCondition) 
-    };
+    return { categories, brands, lots, sizes, colors };
   } catch (error) {
     console.error(error);
-    return { categories: [], brands: [], lots: [], sizes: [], colors: [], conditions: [] };
+    return { categories: [], brands: [], lots: [], sizes: [], colors: [] };
   }
 }
 
@@ -120,7 +113,8 @@ type CreatePieceInput = {
   brandId: string;
   sizeId: string;
   colorId: string;
-  condition: PieceCondition;
+  tags: string[];
+  observations: string;
   lotId: string;
   purchasePrice: number;
 };
@@ -128,7 +122,6 @@ type CreatePieceInput = {
 export async function createPieceAction(companyId: string, data: CreatePieceInput) {
   try {
     const realId = await getRealCompanyId(companyId);
-    
     const autoCode = `AM-${Math.floor(100000 + Math.random() * 900000)}`;
     const autoQrCode = `QR-${autoCode}`;
 
@@ -141,7 +134,8 @@ export async function createPieceAction(companyId: string, data: CreatePieceInpu
         brandId: data.brandId,
         sizeId: data.sizeId,
         colorId: data.colorId,
-        condition: data.condition,
+        tags: data.tags,
+        observations: data.observations,
         gender: "UNISSEX",
         lotId: data.lotId,
         purchasePrice: data.purchasePrice,

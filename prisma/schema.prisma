@@ -199,7 +199,9 @@ model Piece {
   brandId            String
   colorId            String
   sizeId             String
-  condition          PieceCondition
+  condition          PieceCondition?
+  tags String[] @default([])
+observations String?
   gender             Gender
   status             PieceStatus            @default(RECEBIDA)
   purchasePrice      Float
