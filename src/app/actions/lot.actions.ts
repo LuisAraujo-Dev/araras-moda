@@ -1,31 +1,105 @@
+//src/app/actions/lot.actions.ts
 "use server";
 
-import { LotService } from "@/services/lot.service";
-import { createLotSchema } from "@/validators/lot";
+import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { SourceType } from "@prisma/client";
 
-export async function createLotAction(companyId: string, data: unknown) {
-  const validatedFields = createLotSchema.safeParse(data);
-
-  if (!validatedFields.success) {
-    return { error: "Dados inválidos ou mal formatados." };
-  }
-
-  try {
-    await LotService.createLot(companyId, validatedFields.data);
-    revalidatePath("/dashboard/lots");
-    return { success: true };
-  } catch (error) {
-    console.error("Erro ao criar lote:", error); // O linter agora está satisfeito
-    return { error: "Falha ao registar o lote no banco de dados." };
-  }
+async function getRealCompanyId(providedId: string) {
+  if (providedId !== "company-placeholder-id") return providedId;
+  const company = await prisma.company.findFirst();
+  return company?.id || providedId;
 }
 
 export async function getLotsAction(companyId: string) {
   try {
-    return await LotService.getLotsByCompany(companyId);
+    const realId = await getRealCompanyId(companyId);
+    return await prisma.lot.findMany({
+      where: { companyId: realId },
+      include: {
+        _count: {
+          select: { pieces: true }
+        }
+      },
+      orderBy: { purchaseDate: "desc" },
+    });
   } catch (error) {
-    console.error("Erro ao buscar lotes:", error); // O linter agora está satisfeito
+    console.error(error);
     return [];
+  }
+}
+
+type CreateLotInput = {
+  code: string;
+  purchaseDate: Date;
+  sourceName: string;
+  sourceType: SourceType;
+  totalCost: number;
+  quantity: number;
+  notes: string;
+};
+
+export async function createLotAction(companyId: string, data: CreateLotInput) {
+  try {
+    const realId = await getRealCompanyId(companyId);
+    
+    const finalCode = data.code.trim() !== "" 
+      ? data.code 
+      : `LT-${Math.floor(100000 + Math.random() * 900000)}`;
+
+    await prisma.lot.create({
+      data: {
+        code: finalCode,
+        purchaseDate: data.purchaseDate,
+        sourceName: data.sourceName,
+        sourceType: data.sourceType,
+        totalCost: data.totalCost,
+        quantity: data.quantity,
+        notes: data.notes,
+        companyId: realId,
+      },
+    });
+    revalidatePath("/dashboard/lots");
+    return { success: true };
+  } catch (error) {
+    console.error(error);
+    return { error: "Falha ao cadastrar a origem." };
+  }
+}
+
+export async function updateLotAction(lotId: string, companyId: string, data: CreateLotInput) {
+  try {
+    const realId = await getRealCompanyId(companyId);
+    await prisma.lot.update({
+      where: { id: lotId, companyId: realId },
+      data: {
+        code: data.code,
+        purchaseDate: data.purchaseDate,
+        sourceName: data.sourceName,
+        sourceType: data.sourceType,
+        totalCost: data.totalCost,
+        quantity: data.quantity,
+        notes: data.notes,
+      },
+    });
+    revalidatePath("/dashboard/lots");
+    return { success: true };
+  } catch (error) {
+    console.error(error);
+    return { error: "Falha ao atualizar a origem." };
+  }
+}
+
+export async function deleteLotAction(lotId: string, companyId: string) {
+  try {
+    const realId = await getRealCompanyId(companyId);
+    await prisma.lot.delete({
+      where: { id: lotId, companyId: realId },
+    });
+    revalidatePath("/dashboard/lots");
+    return { success: true };
+  } catch (error) {
+    console.error(error);
+    return { error: "Falha ao excluir a origem. Verifique se existem peças vinculadas a ela." };
   }
 }
