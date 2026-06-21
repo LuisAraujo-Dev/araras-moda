@@ -3,7 +3,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { PieceStatus, Prisma, SourceType } from "@prisma/client";
+import { PieceStatus, SourceType } from "@prisma/client";
 
 async function getRealCompanyId(providedId: string) {
   if (providedId !== "company-placeholder-id") return providedId;
@@ -32,7 +32,7 @@ export async function seedTaxonomyAction(companyId: string) {
         totalCost: 0,
         quantity: 1,
         companyId: realId,
-      } as Prisma.LotUncheckedCreateInput,
+      },
     });
 
     revalidatePath("/dashboard/inventory");
@@ -103,7 +103,7 @@ export async function quickAddLot(companyId: string, name: string) {
       totalCost: 0,
       quantity: 1,
       companyId: realId,
-    } as Prisma.LotUncheckedCreateInput,
+    },
   });
 }
 
@@ -122,7 +122,6 @@ type CreatePieceInput = {
 export async function createPieceAction(companyId: string, data: CreatePieceInput) {
   try {
     const realId = await getRealCompanyId(companyId);
-    
     const autoCode = `AM-${Math.floor(100000 + Math.random() * 900000)}`;
     const autoQrCode = `QR-${autoCode}`;
 
@@ -138,13 +137,12 @@ export async function createPieceAction(companyId: string, data: CreatePieceInpu
         tags: data.tags,
         observations: data.observations,
         gender: "UNISSEX",
-        condition: null, 
         lotId: data.lotId,
         purchasePrice: data.purchasePrice,
         estimatedSalePrice: 0,
         status: PieceStatus.ESTOQUE,
         companyId: realId,
-      } as Prisma.PieceUncheckedCreateInput,
+      },
     });
     revalidatePath("/dashboard/inventory");
     return { success: true };
