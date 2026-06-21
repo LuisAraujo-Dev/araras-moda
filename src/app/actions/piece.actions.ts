@@ -3,7 +3,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { PieceStatus, Prisma, SourceType } from "@prisma/client";
+import { PieceStatus, Prisma, SourceType, PieceCondition } from "@prisma/client";
 
 async function getRealCompanyId(providedId: string) {
   if (providedId !== "company-placeholder-id") return providedId;
@@ -67,10 +67,17 @@ export async function getTaxonomyAction(companyId: string) {
       prisma.size.findMany({ where: { companyId: realId }, take: 15, orderBy: { name: 'asc' } }),
       prisma.color.findMany({ where: { companyId: realId }, take: 15, orderBy: { name: 'asc' } }),
     ]);
-    return { categories, brands, lots, sizes, colors };
+    return { 
+      categories, 
+      brands, 
+      lots, 
+      sizes, 
+      colors, 
+      conditions: Object.values(PieceCondition) 
+    };
   } catch (error) {
     console.error(error);
-    return { categories: [], brands: [], lots: [], sizes: [], colors: [] };
+    return { categories: [], brands: [], lots: [], sizes: [], colors: [], conditions: [] };
   }
 }
 
@@ -113,7 +120,7 @@ type CreatePieceInput = {
   brandId: string;
   sizeId: string;
   colorId: string;
-  condition: string;
+  condition: PieceCondition;
   lotId: string;
   purchasePrice: number;
 };
@@ -147,6 +154,6 @@ export async function createPieceAction(companyId: string, data: CreatePieceInpu
     return { success: true };
   } catch (error) {
     console.error(error);
-    return { error: "Falha ao cadastrar a peça. Verifique os dados." };
+    return { error: "Falha ao cadastrar a peça. Verifique os dados selecionados." };
   }
 }

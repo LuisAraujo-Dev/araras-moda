@@ -8,9 +8,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Package, PlusCircle, Zap, Tag, CheckCircle2, ArrowLeft } from "lucide-react";
+import { Package, PlusCircle, Zap, Tag, CheckCircle2, ArrowLeft, AlertCircle } from "lucide-react";
 import { getPiecesAction, seedTaxonomyAction, createPieceAction, getTaxonomyAction, quickAddCategory, quickAddBrand, quickAddSize, quickAddColor, quickAddLot } from "@/app/actions/piece.actions";
-import { Category, Brand, Lot, Size, Color, Piece } from "@prisma/client";
+import { Category, Brand, Lot, Size, Color, Piece, PieceCondition } from "@prisma/client";
 
 type PieceWithRelations = Piece & {
   category: Category;
@@ -26,13 +26,14 @@ type TaxonomyData = {
   lots: Lot[];
   sizes: Size[];
   colors: Color[];
+  conditions: string[];
 };
 
 export default function InventoryPage() {
   const mockCompanyId = "company-placeholder-id";
 
   const [pieces, setPieces] = useState<PieceWithRelations[]>([]);
-  const [taxonomy, setTaxonomy] = useState<TaxonomyData>({ categories: [], brands: [], lots: [], sizes: [], colors: [] });
+  const [taxonomy, setTaxonomy] = useState<TaxonomyData>({ categories: [], brands: [], lots: [], sizes: [], colors: [], conditions: [] });
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [banner, setBanner] = useState({ show: false, message: "", type: "" });
@@ -137,7 +138,7 @@ export default function InventoryPage() {
       brandId: brandId,
       sizeId: sizeId,
       colorId: colorId,
-      condition: formData.get("condition") as string,
+      condition: formData.get("condition") as PieceCondition,
       lotId: lotId,
       purchasePrice: Number(formData.get("purchasePrice")),
     };
@@ -148,10 +149,10 @@ export default function InventoryPage() {
     if (result.success) {
       setOpen(false);
       setCatId(""); setBrandId(""); setSizeId(""); setColorId(""); setLotId("");
-      showBanner("Peça cadastrada com sucesso!", "success");
+      showBanner("Peça guardada com sucesso!", "success");
       await loadData();
     } else {
-      showBanner(result.error || "Erro", "error");
+      showBanner(result.error || "Erro ao guardar a peça.", "error");
     }
   }
 
@@ -161,9 +162,9 @@ export default function InventoryPage() {
   return (
     <div className="space-y-8 relative">
       {banner.show && (
-        <div className={`absolute top-0 left-0 right-0 z-50 flex items-center gap-2 p-4 rounded-lg shadow-md transition-all ${banner.type === "success" ? "bg-emerald-50 text-emerald-800 border border-emerald-200" : "bg-red-50 text-red-800 border border-red-200"}`}>
-          <CheckCircle2 className="w-5 h-5" />
-          <span className="font-medium">{banner.message}</span>
+        <div className={`fixed top-6 right-6 z-100 flex items-center gap-3 px-5 py-4 rounded-lg shadow-xl transition-all min-w-[320px] ${banner.type === "success" ? "bg-emerald-50 text-emerald-900 border border-emerald-200" : "bg-rose-50 text-rose-900 border border-rose-200"}`}>
+          {banner.type === "success" ? <CheckCircle2 className="w-5 h-5 text-emerald-600" /> : <AlertCircle className="w-5 h-5 text-rose-600" />}
+          <span className="font-medium text-sm">{banner.message}</span>
         </div>
       )}
 
@@ -278,13 +279,24 @@ export default function InventoryPage() {
                       </div>
                     </div>
 
-                    <div className="space-y-1">
-                      <Label htmlFor="condition" className="text-[#0A244A]">Observações (Opcional)</Label>
-                      <Input id="condition" name="condition" placeholder="Ex: Fio puxado, Peça nova com etiqueta..." />
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <Label className="text-[#0A244A]">Condição da Peça</Label>
+                        <select id="condition" name="condition" className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
+                          <option value="">Selecione...</option>
+                          {taxonomy.conditions.map((cond) => (
+                            <option key={cond} value={cond}>{cond.replace(/_/g, ' ')}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="observations" className="text-[#0A244A]">Observações (Opcional)</Label>
+                        <Input id="observations" name="observations" placeholder="Ex: Fio puxado, sem etiqueta..." />
+                      </div>
                     </div>
 
                     <Button type="submit" className="w-full mt-4 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white h-11" disabled={loading}>
-                      {loading ? "A processar..." : "Salvar Peça na Arara"}
+                      {loading ? "A processar..." : "Guardar a Peça na Arara"}
                     </Button>
                   </form>
                 </>
