@@ -122,6 +122,7 @@ type CreatePieceInput = {
 export async function createPieceAction(companyId: string, data: CreatePieceInput) {
   try {
     const realId = await getRealCompanyId(companyId);
+    
     const autoCode = `AM-${Math.floor(100000 + Math.random() * 900000)}`;
     const autoQrCode = `QR-${autoCode}`;
 
@@ -137,6 +138,7 @@ export async function createPieceAction(companyId: string, data: CreatePieceInpu
         tags: data.tags,
         observations: data.observations,
         gender: "UNISSEX",
+        condition: null, 
         lotId: data.lotId,
         purchasePrice: data.purchasePrice,
         estimatedSalePrice: 0,
