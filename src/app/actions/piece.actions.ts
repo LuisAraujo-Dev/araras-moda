@@ -151,3 +151,42 @@ export async function createPieceAction(companyId: string, data: CreatePieceInpu
     return { error: "Falha ao cadastrar a peça. Verifique os dados selecionados." };
   }
 }
+
+export async function updatePieceAction(pieceId: string, companyId: string, data: CreatePieceInput) {
+  try {
+    const realId = await getRealCompanyId(companyId);
+    await prisma.piece.update({
+      where: { id: pieceId, companyId: realId },
+      data: {
+        name: data.name,
+        categoryId: data.categoryId,
+        brandId: data.brandId,
+        sizeId: data.sizeId,
+        colorId: data.colorId,
+        tags: data.tags,
+        observations: data.observations,
+        lotId: data.lotId,
+        purchasePrice: data.purchasePrice,
+      },
+    });
+    revalidatePath("/dashboard/inventory");
+    return { success: true };
+  } catch (error) {
+    console.error(error);
+    return { error: "Falha ao atualizar a peça." };
+  }
+}
+
+export async function deletePieceAction(pieceId: string, companyId: string) {
+  try {
+    const realId = await getRealCompanyId(companyId);
+    await prisma.piece.delete({
+      where: { id: pieceId, companyId: realId },
+    });
+    revalidatePath("/dashboard/inventory");
+    return { success: true };
+  } catch (error) {
+    console.error(error);
+    return { error: "Falha ao excluir a peça." };
+  }
+}

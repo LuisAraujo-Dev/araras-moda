@@ -8,8 +8,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Package, PlusCircle, Zap, Tag, CheckCircle2, ArrowLeft, AlertCircle, Filter } from "lucide-react";
-import { getPiecesAction, seedTaxonomyAction, createPieceAction, getTaxonomyAction, quickAddCategory, quickAddBrand, quickAddSize, quickAddColor, quickAddLot } from "@/app/actions/piece.actions";
+import { Package, PlusCircle, Zap, Tag, CheckCircle2, ArrowLeft, AlertCircle, Filter, Pencil, Trash2 } from "lucide-react";
+import { getPiecesAction, seedTaxonomyAction, createPieceAction, updatePieceAction, deletePieceAction, getTaxonomyAction, quickAddCategory, quickAddBrand, quickAddSize, quickAddColor, quickAddLot } from "@/app/actions/piece.actions";
 import { Category, Brand, Lot, Size, Color, Piece } from "@prisma/client";
 
 type PieceWithRelations = Piece & {
@@ -31,15 +31,15 @@ type TaxonomyData = {
 };
 
 const TAG_COLORS: Record<string, string> = {
-  "Higienização": "bg-cyan-100 text-cyan-800 border-cyan-200 hover:bg-cyan-200",
-  "Conserto": "bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-200",
-  "Em consignação": "bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-200",
-  "Postada": "bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200",
-  "Em estoque": "bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-200",
-  "Para doação": "bg-teal-100 text-teal-800 border-teal-200 hover:bg-teal-200",
-  "Doada": "bg-zinc-200 text-zinc-800 border-zinc-300 hover:bg-zinc-300",
-  "Vendida": "bg-lime-100 text-lime-800 border-lime-200 hover:bg-lime-200",
-  "Descartada": "bg-rose-100 text-rose-800 border-rose-200 hover:bg-rose-200",
+  "Higienização": "bg-cyan-100 text-cyan-900 border-cyan-200 hover:bg-cyan-200",
+  "Conserto": "bg-amber-100 text-amber-900 border-amber-400 hover:bg-amber-200",
+  "Em consignação": "bg-purple-100 text-purple-900 border-purple-400 hover:bg-purple-200",
+  "Postada": "bg-blue-100 text-blue-900 border-blue-200 hover:bg-blue-200",
+  "Em estoque": "bg-emerald-100 text-emerald-900 border-emerald-200 hover:bg-emerald-200",
+  "Para doação": "bg-teal-100 text-teal-900 border-teal-200 hover:bg-teal-200",
+  "Doada": "bg-zinc-200 text-zinc-900 border-zinc-300 hover:bg-zinc-300",
+  "Vendida": "bg-lime-100 text-lime-900 border-lime-200 hover:bg-lime-200",
+  "Descartada": "bg-rose-100 text-rose-900 border-rose-200 hover:bg-rose-200",
 };
 
 const AVAILABLE_TAGS = Object.keys(TAG_COLORS);
@@ -52,6 +52,9 @@ export default function InventoryPage() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [banner, setBanner] = useState({ show: false, message: "", type: "" });
+
+  const [editingPiece, setEditingPiece] = useState<PieceWithRelations | null>(null);
+  const [pieceToDelete, setPieceToDelete] = useState<string | null>(null);
 
   const [catId, setCatId] = useState("");
   const [brandId, setBrandId] = useState("");
@@ -153,6 +156,26 @@ export default function InventoryPage() {
     setFilterTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
   };
 
+  const handleEditClick = (piece: PieceWithRelations) => {
+    setEditingPiece(piece);
+    setCatId(piece.categoryId);
+    setBrandId(piece.brandId);
+    setSizeId(piece.sizeId || "");
+    setColorId(piece.colorId || "");
+    setLotId(piece.lotId);
+    setSelectedTags(piece.tags || []);
+    setOpen(true);
+  };
+
+  const handleCloseModal = (val: boolean) => {
+    setOpen(val);
+    if (!val) {
+      setEditingPiece(null);
+      setQuickAdd({ isOpen: false, type: "", label: "" });
+      setCatId(""); setBrandId(""); setSizeId(""); setColorId(""); setLotId(""); setSelectedTags([]);
+    }
+  };
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
@@ -170,16 +193,36 @@ export default function InventoryPage() {
       purchasePrice: Number(formData.get("purchasePrice")),
     };
 
-    const result = await createPieceAction(mockCompanyId, data);
+    let result;
+    if (editingPiece) {
+      result = await updatePieceAction(editingPiece.id, mockCompanyId, data);
+    } else {
+      result = await createPieceAction(mockCompanyId, data);
+    }
+    
     setLoading(false);
 
     if (result.success) {
-      setOpen(false);
-      setCatId(""); setBrandId(""); setSizeId(""); setColorId(""); setLotId(""); setSelectedTags([]);
-      showBanner("Peça guardada com sucesso!", "success");
+      handleCloseModal(false);
+      showBanner(editingPiece ? "Peça atualizada com sucesso!" : "Peça guardada com sucesso!", "success");
       await loadData();
     } else {
       showBanner(result.error || "Erro ao guardar a peça.", "error");
+    }
+  }
+
+  async function confirmDelete() {
+    if (!pieceToDelete) return;
+    setLoading(true);
+    const result = await deletePieceAction(pieceToDelete, mockCompanyId);
+    setLoading(false);
+    
+    if (result.success) {
+      showBanner("Peça excluída com sucesso!", "success");
+      setPieceToDelete(null);
+      await loadData();
+    } else {
+      showBanner(result.error || "Erro ao excluir.", "error");
     }
   }
 
@@ -194,7 +237,7 @@ export default function InventoryPage() {
   return (
     <div className="space-y-8 relative">
       {banner.show && (
-        <div className={`fixed top-6 right-6 z-100 flex items-center gap-3 px-5 py-4 rounded-lg shadow-xl transition-all min-w-[320px] ${banner.type === "success" ? "bg-emerald-50 text-emerald-900 border border-emerald-200" : "bg-rose-50 text-rose-900 border border-rose-200"}`}>
+        <div className={`fixed top-6 right-6 z-50 flex items-center gap-3 px-5 py-4 rounded-lg shadow-xl transition-all min-w-80 ${banner.type === "success" ? "bg-emerald-50 text-emerald-900 border border-emerald-200" : "bg-rose-50 text-rose-900 border border-rose-200"}`}>
           {banner.type === "success" ? <CheckCircle2 className="w-5 h-5 text-emerald-600" /> : <AlertCircle className="w-5 h-5 text-rose-600" />}
           <span className="font-medium text-sm">{banner.message}</span>
         </div>
@@ -211,11 +254,11 @@ export default function InventoryPage() {
             <Zap className="w-4 h-4" /> Carga Rápida
           </Button>
 
-          <Dialog open={open} onOpenChange={(val) => { setOpen(val); if (!val) { setQuickAdd({ isOpen: false, type: "", label: "" }); setSelectedTags([]); } }}>
+          <Dialog open={open} onOpenChange={handleCloseModal}>
             <DialogTrigger className={`flex items-center justify-center gap-2 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white transition-colors shadow-sm h-10 px-4 rounded-md text-sm font-medium ${taxonomy.categories.length === 0 ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}>
               <PlusCircle className="w-4 h-4" /> Cadastrar Peça
             </DialogTrigger>
-            <DialogContent className="sm:max-w-162.5 max-h-[90vh] overflow-y-auto">
+            <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
               
               {quickAdd.isOpen ? (
                 <div className="space-y-6 py-4">
@@ -243,21 +286,23 @@ export default function InventoryPage() {
               ) : (
                 <>
                   <DialogHeader>
-                    <DialogTitle className="text-[#0A244A]">Cadastrar Nova Peça</DialogTitle>
+                    <DialogTitle className="text-[#0A244A]">{editingPiece ? "Editar Peça" : "Cadastrar Nova Peça"}</DialogTitle>
                     <DialogDescription className="text-[#4B4B4B]">
-                      O nome e o código SKU serão gerados automaticamente.
+                      O nome e o código SKU são gerados automaticamente.
                     </DialogDescription>
                   </DialogHeader>
                   
                   <div className="bg-zinc-50 border border-zinc-200 rounded-lg p-3 flex items-center gap-3 mt-2">
                     <div className="p-2 bg-white rounded shadow-sm"><Tag className="w-4 h-4 text-[#1E5AA8]" /></div>
                     <div>
-                      <p className="text-xs text-zinc-500 font-semibold uppercase tracking-wider">Nome Automático</p>
+                      <p className="text-xs text-zinc-500 font-semibold uppercase tracking-wider">
+                        {editingPiece ? `SKU: ${editingPiece.code}` : "Nome Automático"}
+                      </p>
                       <p className="text-[#0A244A] font-bold text-lg leading-tight">{autoName}</p>
                     </div>
                   </div>
 
-                  <form onSubmit={handleSubmit} className="space-y-6 pt-2">
+                  <form key={editingPiece?.id || "new"} onSubmit={handleSubmit} className="space-y-6 pt-2">
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1">
                         <Label className="text-[#0A244A]">Categoria</Label>
@@ -307,7 +352,7 @@ export default function InventoryPage() {
                       </div>
                       <div className="space-y-1">
                         <Label htmlFor="purchasePrice" className="text-[#0A244A]">Custo / Compra (R$)</Label>
-                        <Input id="purchasePrice" name="purchasePrice" type="number" step="0.01" min="0" required />
+                        <Input id="purchasePrice" name="purchasePrice" type="number" step="0.01" min="0" defaultValue={editingPiece?.purchasePrice || ""} required />
                       </div>
                     </div>
 
@@ -335,15 +380,34 @@ export default function InventoryPage() {
 
                     <div className="space-y-1">
                       <Label htmlFor="observations" className="text-[#0A244A]">Observações (Opcional)</Label>
-                      <Input id="observations" name="observations" placeholder="Ex: Fio puxado na manga direita..." />
+                      <Input id="observations" name="observations" defaultValue={editingPiece?.observations || ""} placeholder="Ex: Fio puxado na manga direita..." />
                     </div>
 
                     <Button type="submit" className="w-full mt-4 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white h-11 text-base shadow-sm" disabled={loading}>
-                      {loading ? "A processar..." : "Guardar Peça na Arara"}
+                      {loading ? "A processar..." : (editingPiece ? "Salvar Alterações" : "Guardar Peça na Arara")}
                     </Button>
                   </form>
                 </>
               )}
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={!!pieceToDelete} onOpenChange={(val) => !val && setPieceToDelete(null)}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="text-rose-600 flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5" /> Confirmar Exclusão
+                </DialogTitle>
+                <DialogDescription className="text-zinc-600 mt-3 text-base">
+                  Tem certeza que deseja excluir esta peça da sua Arara? Esta ação não poderá ser desfeita.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex gap-3 mt-4">
+                <Button variant="outline" className="flex-1 cursor-pointer" onClick={() => setPieceToDelete(null)} disabled={loading}>Cancelar</Button>
+                <Button className="flex-1 bg-rose-600 hover:bg-rose-700 text-white cursor-pointer" onClick={confirmDelete} disabled={loading}>
+                  {loading ? "A processar..." : "Sim, Excluir"}
+                </Button>
+              </div>
             </DialogContent>
           </Dialog>
         </div>
@@ -397,6 +461,7 @@ export default function InventoryPage() {
                 <TableHead>Produto</TableHead>
                 <TableHead>Etiquetas</TableHead>
                 <TableHead className="text-right">Custo</TableHead>
+                <TableHead className="text-right w-25">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -431,6 +496,16 @@ export default function InventoryPage() {
                   </TableCell>
                   <TableCell className="font-medium text-[#1E5AA8] text-right">
                     {formatCurrency(piece.purchasePrice)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-1">
+                      <button onClick={() => handleEditClick(piece)} className="p-2 text-zinc-400 hover:text-[#1E5AA8] hover:bg-blue-50 rounded-md transition-colors cursor-pointer" title="Editar Peça">
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => setPieceToDelete(piece.id)} className="p-2 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer" title="Excluir Peça">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
