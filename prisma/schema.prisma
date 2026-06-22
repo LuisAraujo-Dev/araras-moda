@@ -280,6 +280,8 @@ model Consignment {
 model ConsignmentItem {
   consignmentId   String
   pieceId         String
+  status          String  @default("ACCEPTED")
+  rejectionReason String?
   listedPrice     Float
   salePrice       Float?
   commissionValue Float?

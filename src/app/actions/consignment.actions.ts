@@ -25,9 +25,6 @@ export async function getConsignmentsAction(companyId: string) {
             }
           }
         },
-        _count: {
-          select: { items: true }
-        }
       },
       orderBy: { startDate: "desc" },
     });
@@ -55,7 +52,7 @@ export async function getAvailablePiecesAction(companyId: string) {
     const realId = await getRealCompanyId(companyId);
     return await prisma.piece.findMany({
       where: { companyId: realId },
-      select: { id: true, code: true, name: true, purchasePrice: true, estimatedSalePrice: true },
+      select: { id: true, code: true, name: true, purchasePrice: true, estimatedSalePrice: true, tags: true, observations: true },
       orderBy: { createdAt: "desc" },
     });
   } catch (error) {
@@ -64,21 +61,70 @@ export async function getAvailablePiecesAction(companyId: string) {
   }
 }
 
+export async function quickAddStoreAction(companyId: string, name: string) {
+  const realId = await getRealCompanyId(companyId);
+  return prisma.store.create({ data: { name, commissionPercentage: 50, companyId: realId } });
+}
+
+type PieceSelection = {
+  id: string;
+  status: string; // 'ACCEPTED' | 'REJECTED'
+  reason: string;
+};
+
 type CreateConsignmentInput = {
   storeId: string;
   startDate: Date;
   expectedReturnDate: Date | null;
   status: ConsignmentStatus;
-  pieceIds: string[];
+  pieces: PieceSelection[];
 };
+
+async function processPieceUpdates(realId: string, storeId: string, piecesInput: PieceSelection[]) {
+  const store = await prisma.store.findUnique({ where: { id: storeId } });
+  const storeName = store?.name || "Parceiro";
+
+  const pieceIds = piecesInput.map(p => p.id);
+  const piecesData = await prisma.piece.findMany({ where: { id: { in: pieceIds } } });
+  const pieceMap = new Map(piecesData.map(p => [p.id, p]));
+
+  for (const input of piecesInput) {
+    const record = pieceMap.get(input.id);
+    if (!record) continue;
+
+    if (input.status === 'ACCEPTED') {
+      await prisma.piece.update({
+        where: { id: input.id },
+        data: { storeId: storeId, status: "CONSIGNADA" }
+      });
+    } else {
+      const newObs = record.observations 
+        ? `${record.observations} | [Avaliação] Reprovada em ${storeName}: ${input.reason}`
+        : `[Avaliação] Reprovada em ${storeName}: ${input.reason}`;
+      
+      const tagsSet = new Set(record.tags || []);
+      if (input.reason === "Conserto") tagsSet.add("Conserto");
+      if (input.reason === "Higienização") tagsSet.add("Higienização");
+
+      await prisma.piece.update({
+        where: { id: input.id },
+        data: { 
+          storeId: null, 
+          status: "ESTOQUE",
+          observations: newObs,
+          tags: Array.from(tagsSet)
+        }
+      });
+    }
+  }
+}
 
 export async function createConsignmentAction(companyId: string, data: CreateConsignmentInput) {
   try {
     const realId = await getRealCompanyId(companyId);
     
-    const pieces = await prisma.piece.findMany({
-      where: { id: { in: data.pieceIds }, companyId: realId }
-    });
+    const piecesData = await prisma.piece.findMany({ where: { id: { in: data.pieces.map(p => p.id) } } });
+    const pieceMap = new Map(piecesData.map(p => [p.id, p]));
 
     await prisma.consignment.create({
       data: {
@@ -88,20 +134,20 @@ export async function createConsignmentAction(companyId: string, data: CreateCon
         status: data.status,
         companyId: realId,
         items: {
-          create: pieces.map(p => ({
-            pieceId: p.id,
-            listedPrice: p.estimatedSalePrice > 0 ? p.estimatedSalePrice : p.purchasePrice
-          }))
+          create: data.pieces.map(p => {
+            const record = pieceMap.get(p.id);
+            return {
+              pieceId: p.id,
+              status: p.status,
+              rejectionReason: p.reason || null,
+              listedPrice: record?.estimatedSalePrice && record.estimatedSalePrice > 0 ? record.estimatedSalePrice : (record?.purchasePrice || 0)
+            };
+          })
         }
       },
     });
 
-    if (data.pieceIds.length > 0) {
-      await prisma.piece.updateMany({
-        where: { id: { in: data.pieceIds }, companyId: realId },
-        data: { storeId: data.storeId, status: "CONSIGNADA" }
-      });
-    }
+    await processPieceUpdates(realId, data.storeId, data.pieces);
 
     revalidatePath("/dashboard/consignments");
     return { success: true };
@@ -119,9 +165,8 @@ export async function updateConsignmentAction(consignmentId: string, companyId: 
       where: { consignmentId: consignmentId }
     });
 
-    const pieces = await prisma.piece.findMany({
-      where: { id: { in: data.pieceIds }, companyId: realId }
-    });
+    const piecesData = await prisma.piece.findMany({ where: { id: { in: data.pieces.map(p => p.id) } } });
+    const pieceMap = new Map(piecesData.map(p => [p.id, p]));
 
     await prisma.consignment.update({
       where: { id: consignmentId, companyId: realId },
@@ -131,20 +176,20 @@ export async function updateConsignmentAction(consignmentId: string, companyId: 
         expectedReturnDate: data.expectedReturnDate,
         status: data.status,
         items: {
-          create: pieces.map(p => ({
-            pieceId: p.id,
-            listedPrice: p.estimatedSalePrice > 0 ? p.estimatedSalePrice : p.purchasePrice
-          }))
+          create: data.pieces.map(p => {
+            const record = pieceMap.get(p.id);
+            return {
+              pieceId: p.id,
+              status: p.status,
+              rejectionReason: p.reason || null,
+              listedPrice: record?.estimatedSalePrice && record.estimatedSalePrice > 0 ? record.estimatedSalePrice : (record?.purchasePrice || 0)
+            };
+          })
         }
       },
     });
 
-    if (data.pieceIds.length > 0) {
-      await prisma.piece.updateMany({
-        where: { id: { in: data.pieceIds }, companyId: realId },
-        data: { storeId: data.storeId, status: "CONSIGNADA" }
-      });
-    }
+    await processPieceUpdates(realId, data.storeId, data.pieces);
 
     revalidatePath("/dashboard/consignments");
     return { success: true };

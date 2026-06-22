@@ -9,12 +9,14 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Handshake, PlusCircle, CheckCircle2, AlertCircle, Pencil, Trash2, Calendar, Store as StoreIcon, PackageSearch } from "lucide-react";
+import { Handshake, PlusCircle, CheckCircle2, AlertCircle, Pencil, Trash2, Calendar, Store as StoreIcon, PackageSearch, XCircle } from "lucide-react";
 import { getConsignmentsAction, createConsignmentAction, updateConsignmentAction, deleteConsignmentAction, getStoresAction, getAvailablePiecesAction } from "@/app/actions/consignment.actions";
 import { Consignment, Store, ConsignmentStatus } from "@prisma/client";
 
 type ConsignmentItemData = {
   pieceId: string;
+  status: string;
+  rejectionReason: string | null;
   piece: {
     code: string;
     name: string;
@@ -24,9 +26,6 @@ type ConsignmentItemData = {
 type ConsignmentWithRelations = Consignment & {
   store: Store;
   items: ConsignmentItemData[];
-  _count: {
-    items: number;
-  };
 };
 
 type PieceBasicData = {
@@ -34,6 +33,11 @@ type PieceBasicData = {
   code: string;
   name: string;
   purchasePrice: number;
+};
+
+type SelectedPieceState = {
+  status: string;
+  reason: string;
 };
 
 const STATUS_MAP: Record<ConsignmentStatus, { label: string; color: string }> = {
@@ -57,7 +61,7 @@ export default function ConsignmentsPage() {
   const [consignmentToDelete, setConsignmentToDelete] = useState<string | null>(null);
 
   const [storeId, setStoreId] = useState("");
-  const [selectedPieceIds, setSelectedPieceIds] = useState<string[]>([]);
+  const [selectedPieces, setSelectedPieces] = useState<Record<string, SelectedPieceState>>({});
   const [searchPiece, setSearchPiece] = useState("");
 
   const loadData = async () => {
@@ -97,7 +101,15 @@ export default function ConsignmentsPage() {
   const handleEditClick = (consignment: ConsignmentWithRelations) => {
     setEditingConsignment(consignment);
     setStoreId(consignment.storeId);
-    setSelectedPieceIds(consignment.items.map(i => i.pieceId));
+    
+    const initialSelection: Record<string, SelectedPieceState> = {};
+    consignment.items.forEach(item => {
+      initialSelection[item.pieceId] = {
+        status: item.status,
+        reason: item.rejectionReason || ""
+      };
+    });
+    setSelectedPieces(initialSelection);
     setOpen(true);
   };
 
@@ -106,26 +118,50 @@ export default function ConsignmentsPage() {
     if (!val) {
       setEditingConsignment(null);
       setStoreId("");
-      setSelectedPieceIds([]);
+      setSelectedPieces({});
       setSearchPiece("");
     }
   };
 
   const togglePieceSelection = (id: string) => {
-    setSelectedPieceIds(prev => 
-      prev.includes(id) ? prev.filter(pId => pId !== id) : [...prev, id]
-    );
+    setSelectedPieces(prev => {
+      const next = { ...prev };
+      if (next[id]) {
+        delete next[id];
+      } else {
+        next[id] = { status: 'ACCEPTED', reason: '' };
+      }
+      return next;
+    });
+  };
+
+  const updatePieceStatus = (id: string, val: string) => {
+    setSelectedPieces(prev => ({
+      ...prev,
+      [id]: val === 'ACCEPTED' 
+        ? { status: 'ACCEPTED', reason: '' } 
+        : { status: 'REJECTED', reason: val }
+    }));
   };
 
   const selectAllFiltered = () => {
     const filteredIds = filteredPieces.map(p => p.id);
-    const allSelected = filteredIds.every(id => selectedPieceIds.includes(id));
+    const allSelected = filteredIds.every(id => !!selectedPieces[id]);
     
     if (allSelected) {
-      setSelectedPieceIds(prev => prev.filter(id => !filteredIds.includes(id)));
+      setSelectedPieces(prev => {
+        const next = { ...prev };
+        filteredIds.forEach(id => delete next[id]);
+        return next;
+      });
     } else {
-      const newIds = new Set([...selectedPieceIds, ...filteredIds]);
-      setSelectedPieceIds(Array.from(newIds));
+      setSelectedPieces(prev => {
+        const next = { ...prev };
+        filteredIds.forEach(id => {
+          if (!next[id]) next[id] = { status: 'ACCEPTED', reason: '' };
+        });
+        return next;
+      });
     }
   };
 
@@ -145,7 +181,11 @@ export default function ConsignmentsPage() {
       startDate: new Date(formData.get("startDate") as string),
       expectedReturnDate: expectedReturnDateRaw ? new Date(expectedReturnDateRaw) : null,
       status: formData.get("status") as ConsignmentStatus,
-      pieceIds: selectedPieceIds,
+      pieces: Object.entries(selectedPieces).map(([id, info]) => ({
+        id,
+        status: info.status,
+        reason: info.reason
+      })),
     };
 
     let result;
@@ -204,7 +244,7 @@ export default function ConsignmentsPage() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-2">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-[#0A244A]">Consignações</h1>
-          <p className="text-[#4B4B4B] mt-1">Controle as remessas e defina exatamente quais peças foram enviadas para venda.</p>
+          <p className="text-[#4B4B4B] mt-1">Gira remessas e avaliações. As peças devolvidas atualizam o estoque automaticamente.</p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -216,7 +256,7 @@ export default function ConsignmentsPage() {
               <DialogHeader>
                 <DialogTitle className="text-[#0A244A]">{editingConsignment ? "Editar Remessa" : "Criar Nova Remessa"}</DialogTitle>
                 <DialogDescription className="text-[#4B4B4B]">
-                  Selecione o parceiro, as datas e marque as peças que compõem este envio.
+                  Selecione as peças levadas e indique caso alguma tenha sido devolvida na avaliação.
                 </DialogDescription>
               </DialogHeader>
 
@@ -240,13 +280,13 @@ export default function ConsignmentsPage() {
                     {stores.map(store => (
                       <option key={store.id} value={store.id}>{store.name}</option>
                     ))}
-                    <option value="NEW" className="font-bold text-[#1E5AA8]">+ Cadastrar Novo Parceiro</option>
+                    <option value="NEW" className="font-bold text-[#1E5AA8]">+ Cadastrar Novo Parceiro (Ir para tela)</option>
                   </select>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <Label htmlFor="startDate" className="text-[#0A244A]">Data de Envio</Label>
+                    <Label htmlFor="startDate" className="text-[#0A244A]">Data do Envio / Avaliação</Label>
                     <Input id="startDate" name="startDate" type="date" defaultValue={editingConsignment ? new Date(editingConsignment.startDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]} required />
                   </div>
                   <div className="space-y-1">
@@ -258,7 +298,7 @@ export default function ConsignmentsPage() {
                 <div className="space-y-3 bg-zinc-50 border border-zinc-200 rounded-lg p-4">
                   <div className="flex items-center justify-between mb-2">
                     <Label className="text-[#0A244A] flex items-center gap-2">
-                      <PackageSearch className="w-4 h-4" /> Peças na Remessa ({selectedPieceIds.length} selecionadas)
+                      <PackageSearch className="w-4 h-4" /> Avaliação das Peças ({Object.keys(selectedPieces).length} selecionadas)
                     </Label>
                     <button type="button" onClick={selectAllFiltered} className="text-xs font-medium text-[#1E5AA8] hover:underline cursor-pointer">
                       Selecionar Todos (Filtrados)
@@ -272,26 +312,47 @@ export default function ConsignmentsPage() {
                     className="bg-white mb-2"
                   />
                   
-                  <div className="h-48 overflow-y-auto border border-zinc-200 rounded-md bg-white p-2 space-y-1">
+                  <div className="h-64 overflow-y-auto border border-zinc-200 rounded-md bg-white p-2 space-y-1">
                     {filteredPieces.length === 0 ? (
                       <div className="h-full flex items-center justify-center text-xs text-zinc-500">
                         Nenhuma peça encontrada.
                       </div>
                     ) : (
-                      filteredPieces.map(piece => (
-                        <label key={piece.id} className={`flex items-center gap-3 p-2 rounded-md cursor-pointer transition-colors ${selectedPieceIds.includes(piece.id) ? 'bg-blue-50 border border-blue-100' : 'hover:bg-zinc-50 border border-transparent'}`}>
-                          <input 
-                            type="checkbox" 
-                            checked={selectedPieceIds.includes(piece.id)} 
-                            onChange={() => togglePieceSelection(piece.id)} 
-                            className="rounded border-zinc-300 w-4 h-4 text-[#1E5AA8] focus:ring-[#1E5AA8]" 
-                          />
-                          <div className="flex flex-col flex-1">
-                            <span className="text-sm font-medium text-[#0A244A]">{piece.code} - {piece.name}</span>
-                            <span className="text-xs text-zinc-500">Custo Base: {formatCurrency(piece.purchasePrice)}</span>
+                      filteredPieces.map(piece => {
+                        const isSelected = !!selectedPieces[piece.id];
+                        const pieceState = selectedPieces[piece.id];
+
+                        return (
+                          <div key={piece.id} className={`flex items-center gap-3 p-2 rounded-md transition-colors ${isSelected ? (pieceState.status === 'ACCEPTED' ? 'bg-blue-50 border border-blue-100' : 'bg-rose-50 border border-rose-100') : 'hover:bg-zinc-50 border border-transparent'}`}>
+                            <label className="flex items-center gap-3 cursor-pointer flex-1">
+                              <input 
+                                type="checkbox" 
+                                checked={isSelected} 
+                                onChange={() => togglePieceSelection(piece.id)} 
+                                className="rounded border-zinc-300 w-4 h-4 text-[#1E5AA8] focus:ring-[#1E5AA8] cursor-pointer" 
+                              />
+                              <div className="flex flex-col">
+                                <span className="text-sm font-medium text-[#0A244A]">{piece.code} - {piece.name}</span>
+                                <span className="text-xs text-zinc-500">Custo: {formatCurrency(piece.purchasePrice)}</span>
+                              </div>
+                            </label>
+                            
+                            {isSelected && (
+                              <select 
+                                className={`text-xs border rounded p-1.5 focus:outline-none w-48 ${pieceState.status === 'REJECTED' ? 'border-rose-300 text-rose-800 bg-white' : 'border-zinc-200 text-zinc-700 bg-white'}`}
+                                value={pieceState.status === 'REJECTED' ? pieceState.reason : 'ACCEPTED'}
+                                onChange={(e) => updatePieceStatus(piece.id, e.target.value)}
+                              >
+                                <option value="ACCEPTED">✅ Aceita (Ficou na loja)</option>
+                                <option value="Conserto">❌ Devolvida: Conserto</option>
+                                <option value="Higienização">❌ Devolvida: Higienização</option>
+                                <option value="Fora de Temporada">❌ Devolvida: Fora de Temp.</option>
+                                <option value="Sem Interesse">❌ Devolvida: Sem Interesse</option>
+                              </select>
+                            )}
                           </div>
-                        </label>
-                      ))
+                        );
+                      })
                     )}
                   </div>
                 </div>
@@ -306,7 +367,7 @@ export default function ConsignmentsPage() {
                 </div>
 
                 <Button type="submit" className="w-full mt-4 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white h-11 text-base shadow-sm" disabled={loading}>
-                  {loading ? "A processar..." : (editingConsignment ? "Salvar Alterações" : "Criar Remessa com Itens")}
+                  {loading ? "A processar..." : (editingConsignment ? "Salvar Alterações" : "Criar Remessa com Avaliações")}
                 </Button>
               </form>
             </DialogContent>
@@ -339,7 +400,7 @@ export default function ConsignmentsPage() {
             <Handshake className="w-12 h-12 text-[#1E5AA8]/30 mb-4" />
             <h3 className="text-lg font-semibold text-[#0A244A]">Nenhuma remessa em andamento</h3>
             <p className="text-sm text-[#4B4B4B] max-w-sm mt-1">
-              Crie a primeira remessa selecionando as peças para enviar a um parceiro.
+              Crie a primeira remessa selecionando as peças para avaliação no parceiro.
             </p>
           </div>
         ) : (
@@ -348,72 +409,73 @@ export default function ConsignmentsPage() {
               <TableRow>
                 <TableHead className="w-64">Parceiro / Destino</TableHead>
                 <TableHead>Período</TableHead>
-                <TableHead>Peças na Remessa</TableHead>
+                <TableHead>Avaliação (Itens levados)</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right w-24">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {consignments.map((consignment) => (
-                <TableRow key={consignment.id}>
-                  <TableCell>
-                    <div className="flex flex-col">
-                      <span className="font-medium text-[#0A244A]">{consignment.store.name}</span>
-                      <span className="text-xs text-zinc-500 flex items-center gap-1 mt-0.5">
-                        <StoreIcon className="w-3 h-3" /> Id: {consignment.id.substring(0, 8)}...
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-col gap-1">
-                      <span className="text-sm text-[#4B4B4B] flex items-center gap-1">
-                        <Calendar className="w-3.5 h-3.5 text-zinc-400" /> 
-                        E: {formatDate(consignment.startDate)}
-                      </span>
-                      <span className="text-xs text-zinc-500 ml-5">
-                        R: <span className={!consignment.expectedReturnDate ? "italic" : "font-medium"}>
-                          {formatDate(consignment.expectedReturnDate)}
+              {consignments.map((consignment) => {
+                const total = consignment.items.length;
+                const accepted = consignment.items.filter(i => i.status === 'ACCEPTED').length;
+                const rejected = total - accepted;
+
+                return (
+                  <TableRow key={consignment.id}>
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="font-medium text-[#0A244A]">{consignment.store.name}</span>
+                        <span className="text-xs text-zinc-500 flex items-center gap-1 mt-0.5">
+                          <StoreIcon className="w-3 h-3" /> Id: {consignment.id.substring(0, 8)}...
                         </span>
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-col gap-1.5 max-w-sm">
-                      <span className="text-xs font-semibold text-[#4B4B4B]">{consignment._count.items} peças</span>
-                      <div className="flex flex-wrap gap-1">
-                        {consignment.items.slice(0, 3).map(item => (
-                          <Badge key={item.pieceId} variant="secondary" className="bg-zinc-100 text-zinc-700 text-[10px] px-1.5 py-0 border-zinc-200">
-                            {item.piece.code}
-                          </Badge>
-                        ))}
-                        {consignment.items.length > 3 && (
-                          <span className="text-[10px] font-medium text-zinc-400 self-center">
-                            +{consignment.items.length - 3} mais
-                          </span>
-                        )}
-                        {consignment.items.length === 0 && (
-                          <span className="text-xs italic text-amber-600">Nenhuma peça atrelada</span>
-                        )}
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={`font-medium px-2 py-0.5 text-xs ${STATUS_MAP[consignment.status].color}`}>
-                      {STATUS_MAP[consignment.status].label}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <button onClick={() => handleEditClick(consignment)} className="p-2 text-zinc-400 hover:text-[#1E5AA8] hover:bg-blue-50 rounded-md transition-colors cursor-pointer" title="Editar Remessa">
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => setConsignmentToDelete(consignment.id)} className="p-2 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer" title="Excluir Remessa">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-sm text-[#4B4B4B] flex items-center gap-1">
+                          <Calendar className="w-3.5 h-3.5 text-zinc-400" /> 
+                          E: {formatDate(consignment.startDate)}
+                        </span>
+                        <span className="text-xs text-zinc-500 ml-5">
+                          R: <span className={!consignment.expectedReturnDate ? "italic" : "font-medium"}>
+                            {formatDate(consignment.expectedReturnDate)}
+                          </span>
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-sm font-semibold text-[#4B4B4B]">{total} peças levadas</span>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 border-emerald-200 font-medium px-1.5 py-0 text-[10px]">
+                            {accepted} aceites
+                          </Badge>
+                          {rejected > 0 && (
+                            <Badge variant="secondary" className="bg-rose-50 text-rose-700 border-rose-200 font-medium px-1.5 py-0 text-[10px] flex items-center gap-1">
+                              <XCircle className="w-2.5 h-2.5" /> {rejected} devolvidas
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={`font-medium px-2 py-0.5 text-xs ${STATUS_MAP[consignment.status].color}`}>
+                        {STATUS_MAP[consignment.status].label}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <button onClick={() => handleEditClick(consignment)} className="p-2 text-zinc-400 hover:text-[#1E5AA8] hover:bg-blue-50 rounded-md transition-colors cursor-pointer" title="Editar Remessa">
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => setConsignmentToDelete(consignment.id)} className="p-2 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer" title="Excluir Remessa">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         )}
