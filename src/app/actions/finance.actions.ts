@@ -13,9 +13,11 @@ export async function getFinancialDataAction(companyId: string) {
   try {
     const realId = await getRealCompanyId(companyId);
     
-    const [revenues, expenses] = await Promise.all([
+    const [revenues, expenses, pieces, stores] = await Promise.all([
       prisma.revenue.findMany({ where: { companyId: realId }, orderBy: { date: 'desc' } }),
-      prisma.expense.findMany({ where: { companyId: realId }, orderBy: { date: 'desc' } })
+      prisma.expense.findMany({ where: { companyId: realId }, orderBy: { date: 'desc' } }),
+      prisma.piece.findMany({ where: { companyId: realId, NOT: { status: 'VENDIDA' } }, orderBy: { code: 'asc' } }),
+      prisma.store.findMany({ where: { companyId: realId }, orderBy: { name: 'asc' } })
     ]);
 
     const transactions = [
@@ -27,14 +29,22 @@ export async function getFinancialDataAction(companyId: string) {
     const totalExpense = expenses.reduce((acc, curr) => acc + curr.amount, 0);
     const balance = totalRevenue - totalExpense;
 
-    // Extrair categorias únicas já usadas
     const dynamicRevenueCats = Array.from(new Set(revenues.map(r => r.type)));
     const dynamicExpenseCats = Array.from(new Set(expenses.map(e => e.category)));
 
-    return { transactions, totalRevenue, totalExpense, balance, dynamicRevenueCats, dynamicExpenseCats };
+    return { 
+      transactions, 
+      totalRevenue, 
+      totalExpense, 
+      balance, 
+      dynamicRevenueCats, 
+      dynamicExpenseCats,
+      pieces: pieces.map(p => ({ id: p.id, code: p.code, name: p.name })),
+      stores: stores.map(s => ({ id: s.id, name: s.name }))
+    };
   } catch (error) {
     console.error(error);
-    return { transactions: [], totalRevenue: 0, totalExpense: 0, balance: 0, dynamicRevenueCats: [], dynamicExpenseCats: [] };
+    return { transactions: [], totalRevenue: 0, totalExpense: 0, balance: 0, dynamicRevenueCats: [], dynamicExpenseCats: [], pieces: [], stores: [] };
   }
 }
 
@@ -44,6 +54,9 @@ type TransactionInput = {
   category: string;
   description: string;
   date: Date;
+  pieceId?: string | null;
+  saleType?: string | null; // 'OWN' ou 'PARTNER'
+  storeId?: string | null;
 };
 
 export async function createTransactionAction(companyId: string, data: TransactionInput) {
@@ -51,11 +64,30 @@ export async function createTransactionAction(companyId: string, data: Transacti
     const realId = await getRealCompanyId(companyId);
     
     if (data.kind === 'REVENUE') {
+      let finalDescription = data.description;
+
+      if (data.category === 'Venda' && data.pieceId) {
+        const piece = await prisma.piece.findUnique({ where: { id: data.pieceId } });
+        if (piece) {
+          const prefix = data.saleType === 'OWN' ? '[Venda Própria]' : '[Venda Parceiro]';
+          finalDescription = `${prefix} Peça ${piece.code} - ${piece.name} | ${data.description}`;
+          
+          await prisma.piece.update({
+            where: { id: data.pieceId },
+            data: {
+              status: "VENDIDA",
+              tags: ["Vendida"], 
+              storeId: data.saleType === 'OWN' ? null : (data.storeId || piece.storeId)
+            }
+          });
+        }
+      }
+
       await prisma.revenue.create({
         data: {
           amount: data.amount,
           type: data.category,
-          description: data.description,
+          description: finalDescription,
           date: data.date,
           companyId: realId,
         }

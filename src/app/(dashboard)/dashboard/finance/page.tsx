@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +19,9 @@ type Transaction = {
   date: Date;
 };
 
+type BasicPiece = { id: string; code: string; name: string };
+type BasicStore = { id: string; name: string };
+
 const DEFAULT_REVS = ["Venda", "Reembolso", "Investimento"];
 const DEFAULT_EXPS = ["Cartão de Crédito", "Produto de Limpeza", "Material de Reparo", "Combustível", "Uber/99", "Embalagens", "Compra de Lote"];
 
@@ -30,6 +33,9 @@ export default function FinancePage() {
   const [revCats, setRevCats] = useState<string[]>(DEFAULT_REVS);
   const [expCats, setExpCats] = useState<string[]>(DEFAULT_EXPS);
   
+  const [pieces, setPieces] = useState<BasicPiece[]>([]);
+  const [stores, setStores] = useState<BasicStore[]>([]);
+
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [banner, setBanner] = useState({ show: false, message: "", type: "" });
@@ -39,6 +45,10 @@ export default function FinancePage() {
 
   const [txKind, setTxKind] = useState<'REVENUE' | 'EXPENSE'>('REVENUE');
   const [selectedCat, setSelectedCat] = useState("");
+  
+  const [pieceId, setPieceId] = useState("");
+  const [saleType, setSaleType] = useState("OWN"); // 'OWN' ou 'PARTNER'
+  const [storeId, setStoreId] = useState("");
 
   const loadData = async () => {
     const data = await getFinancialDataAction(mockCompanyId);
@@ -46,6 +56,8 @@ export default function FinancePage() {
     setSummary({ totalRevenue: data.totalRevenue, totalExpense: data.totalExpense, balance: data.balance });
     setRevCats(Array.from(new Set([...DEFAULT_REVS, ...data.dynamicRevenueCats])));
     setExpCats(Array.from(new Set([...DEFAULT_EXPS, ...data.dynamicExpenseCats])));
+    setPieces(data.pieces);
+    setStores(data.stores);
   };
 
   useEffect(() => {
@@ -57,14 +69,16 @@ export default function FinancePage() {
         setSummary({ totalRevenue: data.totalRevenue, totalExpense: data.totalExpense, balance: data.balance });
         setRevCats(Array.from(new Set([...DEFAULT_REVS, ...data.dynamicRevenueCats])));
         setExpCats(Array.from(new Set([...DEFAULT_EXPS, ...data.dynamicExpenseCats])));
+        setPieces(data.pieces);
+        setStores(data.stores);
       }
     };
     fetchInitialData();
     return () => { isMounted = false; };
   }, []);
 
-  const showBanner = (message: string, type: "success" | "error") => {
-    setBanner({ show: true, message, type });
+  const showBanner = (m: string, t: "success" | "error") => {
+    setBanner({ show: true, message: m, type: t });
     setTimeout(() => setBanner({ show: false, message: "", type: "" }), 5000);
   };
 
@@ -81,6 +95,9 @@ export default function FinancePage() {
       setEditingTx(null);
       setTxKind('REVENUE');
       setSelectedCat("");
+      setPieceId("");
+      setSaleType("OWN");
+      setStoreId("");
     }
   };
 
@@ -114,6 +131,9 @@ export default function FinancePage() {
       category: selectedCat,
       description: formData.get("description") as string,
       date: new Date(formData.get("date") as string),
+      pieceId: txKind === 'REVENUE' && selectedCat === 'Venda' ? pieceId : null,
+      saleType: txKind === 'REVENUE' && selectedCat === 'Venda' ? saleType : null,
+      storeId: txKind === 'REVENUE' && selectedCat === 'Venda' && saleType === 'PARTNER' ? storeId : null,
     };
 
     let result;
@@ -171,10 +191,11 @@ export default function FinancePage() {
         </div>
 
         <div className="flex items-center gap-3">
+          <Button onClick={() => setOpen(true)} className="flex items-center justify-center gap-2 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white transition-colors shadow-sm h-10 px-4 rounded-md text-sm font-medium">
+            <PlusCircle className="w-4 h-4" /> Nova Transação
+          </Button>
+
           <Dialog open={open} onOpenChange={handleCloseModal}>
-            <DialogTrigger className="flex items-center justify-center gap-2 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white transition-colors shadow-sm h-10 px-4 rounded-md text-sm font-medium">
-              <PlusCircle className="w-4 h-4" /> Nova Transação
-            </DialogTrigger>
             <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle className="text-[#0A244A]">{editingTx ? "Editar Transação" : "Registar Nova Transação"}</DialogTitle>
@@ -183,7 +204,7 @@ export default function FinancePage() {
                 </DialogDescription>
               </DialogHeader>
 
-              <form key={editingTx?.id || "new"} onSubmit={handleSubmit} className="space-y-6 pt-4">
+              <form key={editingTx?.id || "new"} onSubmit={handleSubmit} className="space-y-5 pt-4">
                 <div className="flex p-1 bg-zinc-100 rounded-lg">
                   <button
                     type="button"
@@ -223,9 +244,43 @@ export default function FinancePage() {
                   </select>
                 </div>
 
+                {txKind === 'REVENUE' && selectedCat === 'Venda' && (
+                  <div className="space-y-4 border-l-2 border-emerald-500 pl-3 bg-zinc-50/50 py-2 rounded-r-md animate-in slide-in-from-top-2">
+                    <div className="space-y-1">
+                      <Label className="text-[#0A244A] font-semibold">Vincular Peça do Estoque</Label>
+                      <select value={pieceId} onChange={(e) => setPieceId(e.target.value)} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
+                        <option value="">Qual peça foi vendida?</option>
+                        {pieces.map(p => (
+                          <option key={p.id} value={p.id}>{p.code} - {p.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-[#0A244A] font-semibold">Canal de Venda</Label>
+                      <select value={saleType} onChange={(e) => setSaleType(e.target.value)} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm">
+                        <option value="OWN">Araras Moda (Venda Própria)</option>
+                        <option value="PARTNER">Loja Parceira (Consignação)</option>
+                      </select>
+                    </div>
+
+                    {saleType === 'PARTNER' && (
+                      <div className="space-y-1 animate-in slide-in-from-top-1">
+                        <Label className="text-purple-900 font-semibold">Selecione o Parceiro</Label>
+                        <select value={storeId} onChange={(e) => setStoreId(e.target.value)} className="w-full h-10 px-3 rounded-md border border-purple-200 bg-purple-50 text-sm" required={saleType === 'PARTNER'}>
+                          <option value="">Em qual loja foi vendida?</option>
+                          {stores.map(s => (
+                            <option key={s.id} value={s.id}>{s.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="space-y-1">
                   <Label htmlFor="description" className="text-[#0A244A]">Descrição / Referência</Label>
-                  <Input id="description" name="description" placeholder="Ex: Venda de calças, Compra de cabides..." defaultValue={editingTx?.description || ""} required />
+                  <Input id="description" name="description" placeholder="Ex: Pagamento recebido em dinheiro, PIX..." defaultValue={editingTx?.description || ""} required />
                 </div>
 
                 <Button type="submit" className="w-full mt-4 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white h-11 text-base shadow-sm" disabled={loading}>
