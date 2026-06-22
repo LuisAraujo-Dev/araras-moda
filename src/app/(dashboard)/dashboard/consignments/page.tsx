@@ -1,188 +1,323 @@
+//src/app/(dashboard)/dashboard/consignments/page.tsx
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Handshake, PlusCircle } from "lucide-react";
-import { createConsignmentAction, getConsignmentsAction, getAvailablePiecesAction } from "@/app/actions/consignment.actions";
-import { getStoresAction } from "@/app/actions/store.actions";
-import { Consignment, Store, Piece, ConsignmentItem } from "@prisma/client";
+import { Handshake, PlusCircle, CheckCircle2, AlertCircle, Pencil, Trash2, Calendar, Store as StoreIcon, ArrowLeft } from "lucide-react";
+import { getConsignmentsAction, createConsignmentAction, updateConsignmentAction, deleteConsignmentAction, getStoresAction, quickAddStoreAction } from "@/app/actions/consignment.actions";
+import { Consignment, Store, ConsignmentStatus } from "@prisma/client";
 
 type ConsignmentWithRelations = Consignment & {
   store: Store;
-  items: (ConsignmentItem & {
-    piece: Piece;
-  })[];
+  _count: {
+    items: number;
+  };
+};
+
+const STATUS_MAP: Record<ConsignmentStatus, { label: string; color: string }> = {
+  ACTIVE: { label: "Ativa (Em Loja)", color: "bg-emerald-100 text-emerald-800 border-emerald-200" },
+  FINISHED: { label: "Finalizada (Acerto Feito)", color: "bg-blue-100 text-blue-800 border-blue-200" },
+  RETURNED: { label: "Devolvida (Expirada)", color: "bg-zinc-200 text-zinc-800 border-zinc-300" },
 };
 
 export default function ConsignmentsPage() {
   const mockCompanyId = "company-placeholder-id";
-  const mockUserId = "user-placeholder-id";
 
   const [consignments, setConsignments] = useState<ConsignmentWithRelations[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
-  const [availablePieces, setAvailablePieces] = useState<Piece[]>([]);
-  const [selectedPieces, setSelectedPieces] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [banner, setBanner] = useState({ show: false, message: "", type: "" });
 
-  const loadData = useCallback(async () => {
-    const [consignmentsData, storesData, piecesData] = await Promise.all([
+  const [editingConsignment, setEditingConsignment] = useState<ConsignmentWithRelations | null>(null);
+  const [consignmentToDelete, setConsignmentToDelete] = useState<string | null>(null);
+
+  const [quickAdd, setQuickAdd] = useState({ isOpen: false, value: "" });
+
+  const loadData = async () => {
+    const [consignmentsData, storesData] = await Promise.all([
       getConsignmentsAction(mockCompanyId),
-      getStoresAction(mockCompanyId),
-      getAvailablePiecesAction(mockCompanyId),
+      getStoresAction(mockCompanyId)
     ]);
     setConsignments(consignmentsData as ConsignmentWithRelations[]);
     setStores(storesData as Store[]);
-    setAvailablePieces(piecesData as Piece[]);
-  }, []);
+  };
 
   useEffect(() => {
+    let isMounted = true;
     const fetchInitialData = async () => {
-      await loadData();
+      const [consignmentsData, storesData] = await Promise.all([
+        getConsignmentsAction(mockCompanyId),
+        getStoresAction(mockCompanyId)
+      ]);
+      if (isMounted) {
+        setConsignments(consignmentsData as ConsignmentWithRelations[]);
+        setStores(storesData as Store[]);
+      }
     };
     fetchInitialData();
-  }, [loadData]);
+    return () => { isMounted = false; };
+  }, []);
 
-  function handlePieceToggle(pieceId: string) {
-    setSelectedPieces((prev) =>
-      prev.includes(pieceId) ? prev.filter((id) => id !== pieceId) : [...prev, pieceId]
-    );
-  }
+  const showBanner = (message: string, type: "success" | "error") => {
+    setBanner({ show: true, message, type });
+    setTimeout(() => setBanner({ show: false, message: "", type: "" }), 5000);
+  };
+
+  const handleEditClick = (consignment: ConsignmentWithRelations) => {
+    setEditingConsignment(consignment);
+    setOpen(true);
+  };
+
+  const handleCloseModal = (val: boolean) => {
+    setOpen(val);
+    if (!val) {
+      setEditingConsignment(null);
+      setQuickAdd({ isOpen: false, value: "" });
+    }
+  };
+
+  const handleSaveQuickAdd = async () => {
+    if (!quickAdd.value || quickAdd.value.trim() === "") return;
+    
+    setLoading(true);
+    await quickAddStoreAction(mockCompanyId, quickAdd.value);
+    await loadData(); 
+    setLoading(false);
+    setQuickAdd({ isOpen: false, value: "" });
+  };
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (selectedPieces.length === 0) {
-      alert("Selecione pelo menos uma peça para consignação.");
-      return;
-    }
-
     setLoading(true);
+
     const formData = new FormData(event.currentTarget);
+    const expectedReturnDateRaw = formData.get("expectedReturnDate") as string;
     
     const data = {
       storeId: formData.get("storeId") as string,
-      startDate: formData.get("startDate") as string,
-      expectedReturnDate: formData.get("expectedReturnDate") as string || undefined,
-      pieceIds: selectedPieces,
+      startDate: new Date(formData.get("startDate") as string),
+      expectedReturnDate: expectedReturnDateRaw ? new Date(expectedReturnDateRaw) : null,
+      status: formData.get("status") as ConsignmentStatus,
     };
 
-    const result = await createConsignmentAction(mockCompanyId, mockUserId, data);
+    let result;
+    if (editingConsignment) {
+      result = await updateConsignmentAction(editingConsignment.id, mockCompanyId, data);
+    } else {
+      result = await createConsignmentAction(mockCompanyId, data);
+    }
+    
     setLoading(false);
 
     if (result.success) {
-      setOpen(false);
-      setSelectedPieces([]);
+      handleCloseModal(false);
+      showBanner(editingConsignment ? "Remessa atualizada com sucesso!" : "Nova remessa criada com sucesso!", "success");
       await loadData();
     } else {
-      alert(result.error);
+      showBanner(result.error || "Erro ao guardar a remessa.", "error");
     }
   }
 
+  async function confirmDelete() {
+    if (!consignmentToDelete) return;
+    setLoading(true);
+    const result = await deleteConsignmentAction(consignmentToDelete, mockCompanyId);
+    setLoading(false);
+    
+    if (result.success) {
+      showBanner("Remessa excluída com sucesso!", "success");
+      setConsignmentToDelete(null);
+      await loadData();
+    } else {
+      showBanner(result.error || "Erro ao excluir a remessa.", "error");
+    }
+  }
+
+  const formatDate = (date: Date | null) => 
+    date ? new Intl.DateTimeFormat("pt-BR").format(new Date(date)) : "Não definida";
+
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between">
+    <div className="space-y-8 relative">
+      {banner.show && (
+        <div className={`fixed top-6 right-6 z-50 flex items-center gap-3 px-5 py-4 rounded-lg shadow-xl transition-all min-w-80 ${banner.type === "success" ? "bg-emerald-50 text-emerald-900 border border-emerald-200" : "bg-rose-50 text-rose-900 border border-rose-200"}`}>
+          {banner.type === "success" ? <CheckCircle2 className="w-5 h-5 text-emerald-600" /> : <AlertCircle className="w-5 h-5 text-rose-600" />}
+          <span className="font-medium text-sm">{banner.message}</span>
+        </div>
+      )}
+
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-2">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-zinc-950">Contratos de Consignação</h1>
-          <p className="text-zinc-500">Envie e monitorize o fluxo de mercadorias em lojas parceiras.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-[#0A244A]">Consignações</h1>
+          <p className="text-[#4B4B4B] mt-1">Controle as remessas de peças enviadas para venda em lojas parceiras.</p>
         </div>
 
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger className={`${buttonVariants({ variant: "default" })} flex items-center gap-2`}>
-            <PlusCircle className="w-4 h-4" />
-            Novo Contrato
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-500px">
-            <DialogHeader>
-              <DialogTitle>Emitir Consignação</DialogTitle>
-              <DialogDescription>Selecione o estabelecimento de destino e as peças que serão transferidas.</DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4 pt-2">
-              <div className="space-y-1">
-                <Label htmlFor="storeId">Parceiro de Destino</Label>
-                <select id="storeId" name="storeId" className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
-                  <option value="">Selecione um parceiro...</option>
-                  {stores.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.commissionPercentage}%)</option>)}
-                </select>
-              </div>
+        <div className="flex items-center gap-3">
+          <Dialog open={open} onOpenChange={handleCloseModal}>
+            <DialogTrigger className="flex items-center justify-center gap-2 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white transition-colors shadow-sm h-10 px-4 rounded-md text-sm font-medium">
+              <PlusCircle className="w-4 h-4" /> Nova Remessa
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
+              {quickAdd.isOpen ? (
+                <div className="space-y-6 py-4">
+                  <div className="flex items-center gap-2 mb-4">
+                    <button onClick={() => setQuickAdd({ isOpen: false, value: "" })} className="p-2 hover:bg-zinc-100 rounded-full transition-colors cursor-pointer">
+                      <ArrowLeft className="w-5 h-5 text-zinc-600" />
+                    </button>
+                    <div>
+                      <DialogTitle className="text-[#0A244A]">Novo Parceiro</DialogTitle>
+                      <DialogDescription>Cadastrar uma nova loja parceira para consignação.</DialogDescription>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label className="text-[#0A244A]">Nome do Parceiro</Label>
+                    <Input autoFocus value={quickAdd.value} onChange={(e) => setQuickAdd({ ...quickAdd, value: e.target.value })} placeholder="Ex: Peça Rara Conjunto" />
+                  </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <Label htmlFor="startDate">Data de Envio</Label>
-                  <Input id="startDate" name="startDate" type="date" required />
+                  <div className="flex gap-3">
+                    <Button onClick={handleSaveQuickAdd} className="flex-1 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white" disabled={loading || !quickAdd.value}>
+                      {loading ? "A processar..." : "Salvar e Voltar"}
+                    </Button>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <Label htmlFor="expectedReturnDate">Previsão de Retorno</Label>
-                  <Input id="expectedReturnDate" name="expectedReturnDate" type="date" />
-                </div>
-              </div>
+              ) : (
+                <>
+                  <DialogHeader>
+                    <DialogTitle className="text-[#0A244A]">{editingConsignment ? "Editar Remessa" : "Criar Nova Remessa"}</DialogTitle>
+                    <DialogDescription className="text-[#4B4B4B]">
+                      Crie um lote de envio para o parceiro gerenciar datas e devoluções.
+                    </DialogDescription>
+                  </DialogHeader>
 
-              <div className="space-y-2">
-                <Label>Selecionar Peças Disponíveis ({availablePieces.length})</Label>
-                <div className="border border-zinc-200 rounded-md p-3 max-h-40 overflow-y-auto space-y-2 bg-zinc-50">
-                  {availablePieces.length === 0 ? (
-                    <p className="text-xs text-zinc-500 text-center py-4">Nenhuma peça disponível no estoque físico.</p>
-                  ) : (
-                    availablePieces.map((piece) => (
-                      <label key={piece.id} className="flex items-center gap-3 text-sm font-medium text-zinc-700 cursor-pointer p-1 hover:bg-zinc-100 rounded">
-                        <input
-                          type="checkbox"
-                          checked={selectedPieces.includes(piece.id)}
-                          onChange={() => handlePieceToggle(piece.id)}
-                          className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
-                        />
-                        <span>{piece.code} - {piece.name}</span>
-                      </label>
-                    ))
-                  )}
-                </div>
-              </div>
+                  <form key={editingConsignment?.id || "new"} onSubmit={handleSubmit} className="space-y-6 pt-4">
+                    <div className="space-y-1">
+                      <Label htmlFor="storeId" className="text-[#0A244A]">Loja Parceira</Label>
+                      <select id="storeId" name="storeId" defaultValue={editingConsignment?.storeId || ""} onChange={(e) => { if (e.target.value === "NEW") { setQuickAdd({ isOpen: true, value: "" }); e.target.value = ""; } }} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
+                        <option value="">Selecione o destino...</option>
+                        {stores.map(store => (
+                          <option key={store.id} value={store.id}>{store.name}</option>
+                        ))}
+                        <option value="NEW" className="font-bold text-[#1E5AA8]">+ Cadastrar Novo Parceiro</option>
+                      </select>
+                    </div>
 
-              <Button type="submit" className="w-full mt-2" disabled={loading || availablePieces.length === 0}>
-                {loading ? "A processar..." : "Firmar Contrato"}
-              </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <Label htmlFor="startDate" className="text-[#0A244A]">Data de Envio</Label>
+                        <Input id="startDate" name="startDate" type="date" defaultValue={editingConsignment ? new Date(editingConsignment.startDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]} required />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="expectedReturnDate" className="text-[#0A244A]">Previsão de Retorno (Opcional)</Label>
+                        <Input id="expectedReturnDate" name="expectedReturnDate" type="date" defaultValue={editingConsignment?.expectedReturnDate ? new Date(editingConsignment.expectedReturnDate).toISOString().split('T')[0] : ""} />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label htmlFor="status" className="text-[#0A244A]">Status da Remessa</Label>
+                      <select id="status" name="status" defaultValue={editingConsignment?.status || "ACTIVE"} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
+                        {Object.entries(STATUS_MAP).map(([key, { label }]) => (
+                          <option key={key} value={key}>{label}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <Button type="submit" className="w-full mt-4 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white h-11 text-base shadow-sm" disabled={loading}>
+                      {loading ? "A processar..." : (editingConsignment ? "Salvar Alterações" : "Criar Remessa")}
+                    </Button>
+                  </form>
+                </>
+              )}
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={!!consignmentToDelete} onOpenChange={(val) => !val && setConsignmentToDelete(null)}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="text-rose-600 flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5" /> Confirmar Exclusão
+                </DialogTitle>
+                <DialogDescription className="text-zinc-600 mt-3 text-base">
+                  Tem certeza que deseja excluir esta remessa? O histórico será perdido permanentemente.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex gap-3 mt-4">
+                <Button variant="outline" className="flex-1 cursor-pointer" onClick={() => setConsignmentToDelete(null)} disabled={loading}>Cancelar</Button>
+                <Button className="flex-1 bg-rose-600 hover:bg-rose-700 text-white cursor-pointer" onClick={confirmDelete} disabled={loading}>
+                  {loading ? "A processar..." : "Sim, Excluir"}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-zinc-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl border border-zinc-200 shadow-sm overflow-hidden mt-6">
         {consignments.length === 0 ? (
-          <div className="p-12 text-center flex flex-col items-center justify-center">
-            <Handshake className="w-12 h-12 text-zinc-300 mb-4" />
-            <h3 className="text-lg font-semibold text-zinc-900">Nenhum contrato ativo</h3>
-            <p className="text-sm text-zinc-500 max-w-sm mt-1">Crie um novo contrato para transferir peças do estoque para os seus parceiros comerciais.</p>
+          <div className="p-16 text-center flex flex-col items-center justify-center">
+            <Handshake className="w-12 h-12 text-[#1E5AA8]/30 mb-4" />
+            <h3 className="text-lg font-semibold text-[#0A244A]">Nenhuma remessa em andamento</h3>
+            <p className="text-sm text-[#4B4B4B] max-w-sm mt-1">
+              Crie a primeira remessa ao enviar um lote de peças para um parceiro de consignação.
+            </p>
           </div>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Parceiro</TableHead>
-                <TableHead>Data de Envio</TableHead>
-                <TableHead>Previsão Retorno</TableHead>
-                <TableHead className="text-center">Qtd Itens</TableHead>
-                <TableHead className="text-center">Status</TableHead>
+                <TableHead>Parceiro / Destino</TableHead>
+                <TableHead>Período de Consignação</TableHead>
+                <TableHead className="text-center">Total de Itens</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right w-24">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {consignments.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="font-medium text-zinc-900">{item.store.name}</TableCell>
-                  <TableCell className="text-zinc-600">
-                    {new Date(item.startDate).toLocaleDateString("pt-BR")}
+              {consignments.map((consignment) => (
+                <TableRow key={consignment.id}>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span className="font-medium text-[#0A244A]">{consignment.store.name}</span>
+                      <span className="text-xs text-zinc-500 flex items-center gap-1 mt-0.5">
+                        <StoreIcon className="w-3 h-3" /> Id: {consignment.id.substring(0, 8)}...
+                      </span>
+                    </div>
                   </TableCell>
-                  <TableCell className="text-zinc-600">
-                    {item.expectedReturnDate ? new Date(item.expectedReturnDate).toLocaleDateString("pt-BR") : "-"}
+                  <TableCell>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-sm text-[#4B4B4B] flex items-center gap-1">
+                        <Calendar className="w-3.5 h-3.5 text-zinc-400" /> 
+                        Envio: {formatDate(consignment.startDate)}
+                      </span>
+                      <span className="text-xs text-zinc-500">
+                        Retorno: <span className={!consignment.expectedReturnDate ? "italic" : "font-medium"}>
+                          {formatDate(consignment.expectedReturnDate)}
+                        </span>
+                      </span>
+                    </div>
                   </TableCell>
-                  <TableCell className="text-center font-medium">{item.items.length}</TableCell>
-                  <TableCell className="text-center">
-                    <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-50">
-                      {item.status.toLowerCase()}
+                  <TableCell className="text-center font-medium text-[#4B4B4B]">
+                    {consignment._count.items}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className={`font-medium px-2 py-0.5 text-xs ${STATUS_MAP[consignment.status].color}`}>
+                      {STATUS_MAP[consignment.status].label}
                     </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-1">
+                      <button onClick={() => handleEditClick(consignment)} className="p-2 text-zinc-400 hover:text-[#1E5AA8] hover:bg-blue-50 rounded-md transition-colors cursor-pointer" title="Editar Remessa">
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => setConsignmentToDelete(consignment.id)} className="p-2 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer" title="Excluir Remessa">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
