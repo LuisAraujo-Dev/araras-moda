@@ -9,10 +9,6 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { DollarSign, PlusCircle, CheckCircle2, AlertCircle, Pencil, Trash2, TrendingUp, TrendingDown, Wallet, Calendar } from "lucide-react";
 import { getFinancialDataAction, createTransactionAction, updateTransactionAction, deleteTransactionAction } from "@/app/actions/finance.actions";
-import { RevenueType, ExpenseCategory } from "@prisma/client";
-
-const REVENUE_TYPES = Object.values(RevenueType);
-const EXPENSE_CATEGORIES = Object.values(ExpenseCategory);
 
 type Transaction = {
   id: string;
@@ -23,11 +19,17 @@ type Transaction = {
   date: Date;
 };
 
+const DEFAULT_REVS = ["Venda", "Reembolso", "Investimento"];
+const DEFAULT_EXPS = ["Cartão de Crédito", "Produto de Limpeza", "Material de Reparo", "Combustível", "Uber/99", "Embalagens", "Compra de Lote"];
+
 export default function FinancePage() {
   const mockCompanyId = "company-placeholder-id";
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [summary, setSummary] = useState({ totalRevenue: 0, totalExpense: 0, balance: 0 });
+  const [revCats, setRevCats] = useState<string[]>(DEFAULT_REVS);
+  const [expCats, setExpCats] = useState<string[]>(DEFAULT_EXPS);
+  
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [banner, setBanner] = useState({ show: false, message: "", type: "" });
@@ -36,11 +38,14 @@ export default function FinancePage() {
   const [txToDelete, setTxToDelete] = useState<{ id: string, kind: 'REVENUE' | 'EXPENSE' } | null>(null);
 
   const [txKind, setTxKind] = useState<'REVENUE' | 'EXPENSE'>('REVENUE');
+  const [selectedCat, setSelectedCat] = useState("");
 
   const loadData = async () => {
     const data = await getFinancialDataAction(mockCompanyId);
     setTransactions(data.transactions);
     setSummary({ totalRevenue: data.totalRevenue, totalExpense: data.totalExpense, balance: data.balance });
+    setRevCats(Array.from(new Set([...DEFAULT_REVS, ...data.dynamicRevenueCats])));
+    setExpCats(Array.from(new Set([...DEFAULT_EXPS, ...data.dynamicExpenseCats])));
   };
 
   useEffect(() => {
@@ -50,6 +55,8 @@ export default function FinancePage() {
       if (isMounted) {
         setTransactions(data.transactions);
         setSummary({ totalRevenue: data.totalRevenue, totalExpense: data.totalExpense, balance: data.balance });
+        setRevCats(Array.from(new Set([...DEFAULT_REVS, ...data.dynamicRevenueCats])));
+        setExpCats(Array.from(new Set([...DEFAULT_EXPS, ...data.dynamicExpenseCats])));
       }
     };
     fetchInitialData();
@@ -64,6 +71,7 @@ export default function FinancePage() {
   const handleEditClick = (tx: Transaction) => {
     setEditingTx(tx);
     setTxKind(tx.kind);
+    setSelectedCat(tx.categoryLabel);
     setOpen(true);
   };
 
@@ -72,19 +80,38 @@ export default function FinancePage() {
     if (!val) {
       setEditingTx(null);
       setTxKind('REVENUE');
+      setSelectedCat("");
+    }
+  };
+
+  const handleCatChange = (val: string) => {
+    if (val === "NEW") {
+      const newCat = window.prompt("Digite o nome da nova categoria:");
+      if (newCat && newCat.trim() !== "") {
+        if (txKind === 'REVENUE') setRevCats(prev => [...prev, newCat]);
+        else setExpCats(prev => [...prev, newCat]);
+        setSelectedCat(newCat);
+      } else {
+        setSelectedCat("");
+      }
+    } else {
+      setSelectedCat(val);
     }
   };
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!selectedCat) {
+      showBanner("Selecione uma categoria válida.", "error");
+      return;
+    }
     setLoading(true);
 
     const formData = new FormData(event.currentTarget);
-    
     const data = {
       kind: txKind,
       amount: Number(formData.get("amount")),
-      category: formData.get("category") as string,
+      category: selectedCat,
       description: formData.get("description") as string,
       date: new Date(formData.get("date") as string),
     };
@@ -160,14 +187,14 @@ export default function FinancePage() {
                 <div className="flex p-1 bg-zinc-100 rounded-lg">
                   <button
                     type="button"
-                    onClick={() => setTxKind('REVENUE')}
+                    onClick={() => { setTxKind('REVENUE'); setSelectedCat(""); }}
                     className={`flex-1 py-2 text-sm font-semibold rounded-md transition-colors cursor-pointer ${txKind === 'REVENUE' ? 'bg-white text-emerald-700 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
                   >
                     Entrada (Receita)
                   </button>
                   <button
                     type="button"
-                    onClick={() => setTxKind('EXPENSE')}
+                    onClick={() => { setTxKind('EXPENSE'); setSelectedCat(""); }}
                     className={`flex-1 py-2 text-sm font-semibold rounded-md transition-colors cursor-pointer ${txKind === 'EXPENSE' ? 'bg-white text-rose-700 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
                   >
                     Saída (Despesa)
@@ -186,13 +213,13 @@ export default function FinancePage() {
                 </div>
 
                 <div className="space-y-1">
-                  <Label htmlFor="category" className="text-[#0A244A]">Categoria</Label>
-                  <select id="category" name="category" defaultValue={editingTx?.categoryLabel || ""} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
+                  <Label className="text-[#0A244A]">Categoria</Label>
+                  <select value={selectedCat} onChange={(e) => handleCatChange(e.target.value)} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
                     <option value="">Selecione...</option>
-                    {txKind === 'REVENUE' 
-                      ? REVENUE_TYPES.map(cat => <option key={cat} value={cat}>{cat.replace(/_/g, ' ')}</option>)
-                      : EXPENSE_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat.replace(/_/g, ' ')}</option>)
-                    }
+                    {(txKind === 'REVENUE' ? revCats : expCats).map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                    <option value="NEW" className="font-bold text-[#1E5AA8]">+ Cadastrar Nova Categoria</option>
                   </select>
                 </div>
 
@@ -298,7 +325,7 @@ export default function FinancePage() {
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline" className={`font-medium px-2 py-0.5 text-xs ${tx.kind === 'REVENUE' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
-                      {tx.categoryLabel.replace(/_/g, ' ')}
+                      {tx.categoryLabel}
                     </Badge>
                   </TableCell>
                   <TableCell className={`font-semibold text-right ${tx.kind === 'REVENUE' ? 'text-emerald-600' : 'text-rose-600'}`}>

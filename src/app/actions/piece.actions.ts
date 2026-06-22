@@ -3,7 +3,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { PieceStatus, SourceType } from "@prisma/client";
+import { SourceType } from "@prisma/client";
 
 async function getRealCompanyId(providedId: string) {
   if (providedId !== "company-placeholder-id") return providedId;
@@ -22,18 +22,9 @@ export async function seedTaxonomyAction(companyId: string) {
     await prisma.brand.create({ data: { name: "Gucci", companyId: realId } });
     await prisma.size.create({ data: { name: "40", companyId: realId } });
     await prisma.color.create({ data: { name: "Preta", companyId: realId } });
-    await prisma.store.create({ data: { name: "Peça Rara Gama", commissionPercentage: 50, companyId: realId } });
     
     await prisma.lot.create({
-      data: {
-        code: "LOTE-INICIAL",
-        purchaseDate: new Date(),
-        sourceName: "Carga de Teste",
-        sourceType: SourceType.BAZAR,
-        totalCost: 0,
-        quantity: 1,
-        companyId: realId,
-      },
+      data: { code: "LOTE-INICIAL", purchaseDate: new Date(), sourceName: "Carga de Teste", sourceType: SourceType.BAZAR, totalCost: 0, quantity: 1, companyId: realId },
     });
 
     revalidatePath("/dashboard/inventory");
@@ -76,108 +67,69 @@ export async function getTaxonomyAction(companyId: string) {
   }
 }
 
-export async function quickAddCategory(companyId: string, name: string) {
-  const realId = await getRealCompanyId(companyId);
-  return prisma.category.create({ data: { name, companyId: realId } });
-}
-export async function quickAddBrand(companyId: string, name: string) {
-  const realId = await getRealCompanyId(companyId);
-  return prisma.brand.create({ data: { name, companyId: realId } });
-}
-export async function quickAddSize(companyId: string, name: string) {
-  const realId = await getRealCompanyId(companyId);
-  return prisma.size.create({ data: { name, companyId: realId } });
-}
-export async function quickAddColor(companyId: string, name: string) {
-  const realId = await getRealCompanyId(companyId);
-  return prisma.color.create({ data: { name, companyId: realId } });
-}
-export async function quickAddStore(companyId: string, name: string) {
-  const realId = await getRealCompanyId(companyId);
-  return prisma.store.create({ data: { name, commissionPercentage: 50, companyId: realId } });
-}
+export async function quickAddCategory(c: string, n: string) { return prisma.category.create({ data: { name: n, companyId: await getRealCompanyId(c) } }); }
+export async function quickAddBrand(c: string, n: string) { return prisma.brand.create({ data: { name: n, companyId: await getRealCompanyId(c) } }); }
+export async function quickAddSize(c: string, n: string) { return prisma.size.create({ data: { name: n, companyId: await getRealCompanyId(c) } }); }
+export async function quickAddColor(c: string, n: string) { return prisma.color.create({ data: { name: n, companyId: await getRealCompanyId(c) } }); }
+export async function quickAddStore(c: string, n: string) { return prisma.store.create({ data: { name: n, commissionPercentage: 50, companyId: await getRealCompanyId(c) } }); }
 export async function quickAddLot(companyId: string, name: string) {
   const realId = await getRealCompanyId(companyId);
   const code = name.toUpperCase().replace(/\s+/g, '-').substring(0, 15) + `-${Math.floor(Math.random() * 1000)}`;
-  
-  return prisma.lot.create({
-    data: {
-      code: code,
-      purchaseDate: new Date(),
-      sourceName: name,
-      sourceType: SourceType.OUTRO,
-      totalCost: 0,
-      quantity: 1,
-      companyId: realId,
-    },
-  });
+  return prisma.lot.create({ data: { code, purchaseDate: new Date(), sourceName: name, sourceType: SourceType.OUTRO, totalCost: 0, quantity: 1, companyId: realId } });
 }
 
 type CreatePieceInput = {
-  name: string;
-  categoryId: string;
-  brandId: string;
-  sizeId: string;
-  colorId: string;
-  tags: string[];
-  observations: string;
-  lotId: string;
-  storeId: string | null;
-  purchasePrice: number;
+  name: string; categoryId: string; brandId: string; sizeId: string; colorId: string;
+  tags: string[]; observations: string; lotId: string; storeId: string | null; purchasePrice: number;
+  registerSale?: boolean; salePrice?: number;
 };
 
 export async function createPieceAction(companyId: string, data: CreatePieceInput) {
   try {
     const realId = await getRealCompanyId(companyId);
     const autoCode = `AM-${Math.floor(100000 + Math.random() * 900000)}`;
-    const autoQrCode = `QR-${autoCode}`;
 
     await prisma.piece.create({
       data: {
-        code: autoCode,
-        qrCode: autoQrCode,
-        name: data.name,
-        categoryId: data.categoryId,
-        brandId: data.brandId,
-        sizeId: data.sizeId,
-        colorId: data.colorId,
-        tags: data.tags,
-        observations: data.observations,
-        gender: "UNISSEX",
-        lotId: data.lotId,
-        storeId: data.storeId,
-        purchasePrice: data.purchasePrice,
-        estimatedSalePrice: 0,
-        status: PieceStatus.ESTOQUE,
-        companyId: realId,
+        code: autoCode, qrCode: `QR-${autoCode}`, name: data.name, categoryId: data.categoryId, brandId: data.brandId,
+        sizeId: data.sizeId, colorId: data.colorId, tags: data.tags, observations: data.observations,
+        gender: "UNISSEX", lotId: data.lotId, storeId: data.storeId, purchasePrice: data.purchasePrice,
+        estimatedSalePrice: 0, status: data.tags.includes("Vendida") ? "VENDIDA" : "ESTOQUE", companyId: realId,
       },
     });
+
+    if (data.registerSale && data.salePrice) {
+      await prisma.revenue.create({
+        data: { amount: data.salePrice, type: "Venda", description: `Venda Direta: ${autoCode} - ${data.name}`, date: new Date(), companyId: realId }
+      });
+    }
     revalidatePath("/dashboard/inventory");
     return { success: true };
   } catch (error) {
     console.error(error);
-    return { error: "Falha ao cadastrar a peça. Verifique os dados selecionados." };
+    return { error: "Falha ao cadastrar a peça." };
   }
 }
 
 export async function updatePieceAction(pieceId: string, companyId: string, data: CreatePieceInput) {
   try {
     const realId = await getRealCompanyId(companyId);
+    const piece = await prisma.piece.findUnique({ where: { id: pieceId } });
+
     await prisma.piece.update({
       where: { id: pieceId, companyId: realId },
       data: {
-        name: data.name,
-        categoryId: data.categoryId,
-        brandId: data.brandId,
-        sizeId: data.sizeId,
-        colorId: data.colorId,
-        tags: data.tags,
-        observations: data.observations,
-        lotId: data.lotId,
-        storeId: data.storeId,
-        purchasePrice: data.purchasePrice,
+        name: data.name, categoryId: data.categoryId, brandId: data.brandId, sizeId: data.sizeId, colorId: data.colorId,
+        tags: data.tags, observations: data.observations, lotId: data.lotId, storeId: data.storeId, purchasePrice: data.purchasePrice,
+        status: data.tags.includes("Vendida") ? "VENDIDA" : (data.storeId ? "CONSIGNADA" : "ESTOQUE")
       },
     });
+
+    if (data.registerSale && data.salePrice) {
+      await prisma.revenue.create({
+        data: { amount: data.salePrice, type: "Venda", description: `Venda: ${piece?.code} - ${data.name}`, date: new Date(), companyId: realId }
+      });
+    }
     revalidatePath("/dashboard/inventory");
     return { success: true };
   } catch (error) {
@@ -188,10 +140,7 @@ export async function updatePieceAction(pieceId: string, companyId: string, data
 
 export async function deletePieceAction(pieceId: string, companyId: string) {
   try {
-    const realId = await getRealCompanyId(companyId);
-    await prisma.piece.delete({
-      where: { id: pieceId, companyId: realId },
-    });
+    await prisma.piece.delete({ where: { id: pieceId, companyId: await getRealCompanyId(companyId) } });
     revalidatePath("/dashboard/inventory");
     return { success: true };
   } catch (error) {

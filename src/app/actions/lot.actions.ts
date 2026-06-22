@@ -1,4 +1,3 @@
-//src/app/actions/lot.actions.ts
 "use server";
 
 import { prisma } from "@/lib/prisma";
@@ -54,6 +53,19 @@ export async function createLotAction(companyId: string, data: CreateLotInput) {
         companyId: realId,
       },
     });
+
+    if (data.totalCost > 0) {
+      await prisma.expense.create({
+        data: { 
+          amount: data.totalCost, 
+          category: "Compra de Lote", 
+          description: `Aquisição de Lote: ${data.sourceName}`, 
+          date: data.purchaseDate, 
+          companyId: realId 
+        }
+      });
+    }
+
     revalidatePath("/dashboard/lots");
     return { success: true };
   } catch (error) {

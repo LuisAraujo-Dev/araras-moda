@@ -1,4 +1,3 @@
-//src/app/actions/consignment.actions.ts
 "use server";
 
 import { prisma } from "@/lib/prisma";
@@ -61,14 +60,9 @@ export async function getAvailablePiecesAction(companyId: string) {
   }
 }
 
-export async function quickAddStoreAction(companyId: string, name: string) {
-  const realId = await getRealCompanyId(companyId);
-  return prisma.store.create({ data: { name, commissionPercentage: 50, companyId: realId } });
-}
-
 type PieceSelection = {
   id: string;
-  status: string; // 'ACCEPTED' | 'REJECTED'
+  status: string; 
   reason: string;
 };
 
@@ -78,6 +72,7 @@ type CreateConsignmentInput = {
   expectedReturnDate: Date | null;
   status: ConsignmentStatus;
   pieces: PieceSelection[];
+  shippingCost?: number;
 };
 
 async function processPieceUpdates(realId: string, storeId: string, piecesInput: PieceSelection[]) {
@@ -149,6 +144,19 @@ export async function createConsignmentAction(companyId: string, data: CreateCon
 
     await processPieceUpdates(realId, data.storeId, data.pieces);
 
+    if (data.shippingCost && data.shippingCost > 0) {
+      const store = await prisma.store.findUnique({ where: { id: data.storeId } });
+      await prisma.expense.create({
+        data: { 
+          amount: data.shippingCost, 
+          category: "Uber/99", 
+          description: `Envio Consignação: ${store?.name || "Parceiro"}`, 
+          date: data.startDate, 
+          companyId: realId 
+        }
+      });
+    }
+
     revalidatePath("/dashboard/consignments");
     return { success: true };
   } catch (error) {
@@ -190,6 +198,19 @@ export async function updateConsignmentAction(consignmentId: string, companyId: 
     });
 
     await processPieceUpdates(realId, data.storeId, data.pieces);
+
+    if (data.shippingCost && data.shippingCost > 0) {
+      const store = await prisma.store.findUnique({ where: { id: data.storeId } });
+      await prisma.expense.create({
+        data: { 
+          amount: data.shippingCost, 
+          category: "Uber/99", 
+          description: `Envio Consignação: ${store?.name || "Parceiro"} (Atualizado)`, 
+          date: data.startDate, 
+          companyId: realId 
+        }
+      });
+    }
 
     revalidatePath("/dashboard/consignments");
     return { success: true };

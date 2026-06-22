@@ -54,23 +54,6 @@ enum ConsignmentStatus {
   RETURNED
 }
 
-enum RevenueType {
-  VENDA
-  REEMBOLSO
-  OUTRO
-}
-
-enum ExpenseCategory {
-  LIMPEZA
-  REPARO
-  COMBUSTIVEL
-  TRANSPORTE
-  EMBALAGEM
-  CABIDE
-  MARKETING
-  OUTRO
-}
-
 model Company {
   id           String         @id @default(cuid())
   name         String
@@ -296,7 +279,7 @@ model Revenue {
   id          String      @id @default(cuid())
   companyId   String
   amount      Float
-  type        RevenueType
+  type        String
   description String?     @db.Text
   date        DateTime
   createdAt   DateTime    @default(now())
@@ -308,7 +291,7 @@ model Expense {
   id            String                 @id @default(cuid())
   companyId     String
   amount        Float
-  category      ExpenseCategory
+  category      String
   description   String?                @db.Text
   date          DateTime
   isApportioned Boolean                @default(false)

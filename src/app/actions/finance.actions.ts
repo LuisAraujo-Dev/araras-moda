@@ -2,7 +2,6 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { RevenueType, ExpenseCategory } from "@prisma/client";
 
 async function getRealCompanyId(providedId: string) {
   if (providedId !== "company-placeholder-id") return providedId;
@@ -28,10 +27,14 @@ export async function getFinancialDataAction(companyId: string) {
     const totalExpense = expenses.reduce((acc, curr) => acc + curr.amount, 0);
     const balance = totalRevenue - totalExpense;
 
-    return { transactions, totalRevenue, totalExpense, balance };
+    // Extrair categorias únicas já usadas
+    const dynamicRevenueCats = Array.from(new Set(revenues.map(r => r.type)));
+    const dynamicExpenseCats = Array.from(new Set(expenses.map(e => e.category)));
+
+    return { transactions, totalRevenue, totalExpense, balance, dynamicRevenueCats, dynamicExpenseCats };
   } catch (error) {
     console.error(error);
-    return { transactions: [], totalRevenue: 0, totalExpense: 0, balance: 0 };
+    return { transactions: [], totalRevenue: 0, totalExpense: 0, balance: 0, dynamicRevenueCats: [], dynamicExpenseCats: [] };
   }
 }
 
@@ -51,7 +54,7 @@ export async function createTransactionAction(companyId: string, data: Transacti
       await prisma.revenue.create({
         data: {
           amount: data.amount,
-          type: data.category as RevenueType,
+          type: data.category,
           description: data.description,
           date: data.date,
           companyId: realId,
@@ -61,7 +64,7 @@ export async function createTransactionAction(companyId: string, data: Transacti
       await prisma.expense.create({
         data: {
           amount: data.amount,
-          category: data.category as ExpenseCategory,
+          category: data.category,
           description: data.description,
           date: data.date,
           companyId: realId,
@@ -86,7 +89,7 @@ export async function updateTransactionAction(id: string, companyId: string, dat
         where: { id, companyId: realId },
         data: {
           amount: data.amount,
-          type: data.category as RevenueType,
+          type: data.category,
           description: data.description,
           date: data.date,
         }
@@ -96,7 +99,7 @@ export async function updateTransactionAction(id: string, companyId: string, dat
         where: { id, companyId: realId },
         data: {
           amount: data.amount,
-          category: data.category as ExpenseCategory,
+          category: data.category,
           description: data.description,
           date: data.date,
         }

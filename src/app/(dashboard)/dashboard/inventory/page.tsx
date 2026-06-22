@@ -1,4 +1,3 @@
-//src/app/(dashboard)/dashboard/inventory/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -8,27 +7,27 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Package, PlusCircle, Zap, Tag, CheckCircle2, ArrowLeft, AlertCircle, Filter, Pencil, Trash2, Store } from "lucide-react";
+import { Package, PlusCircle, Zap, Tag, CheckCircle2, AlertCircle, Filter, Pencil, Trash2, Store, ArrowLeft } from "lucide-react";
 import { getPiecesAction, seedTaxonomyAction, createPieceAction, updatePieceAction, deletePieceAction, getTaxonomyAction, quickAddCategory, quickAddBrand, quickAddSize, quickAddColor, quickAddLot, quickAddStore } from "@/app/actions/piece.actions";
 import { Category, Brand, Lot, Size, Color, Piece, Store as StoreModel } from "@prisma/client";
 
 type PieceWithRelations = Piece & {
-  category: Category;
-  brand: Brand;
-  lot: Lot;
-  size: Size | null;
-  color: Color | null;
+  category: Category; 
+  brand: Brand; 
+  lot: Lot; 
+  size: Size | null; 
+  color: Color | null; 
   store: StoreModel | null;
-  tags: string[];
+  tags: string[]; 
   observations: string | null;
 };
 
 type TaxonomyData = {
-  categories: Category[];
-  brands: Brand[];
-  lots: Lot[];
-  sizes: Size[];
-  colors: Color[];
+  categories: Category[]; 
+  brands: Brand[]; 
+  lots: Lot[]; 
+  sizes: Size[]; 
+  colors: Color[]; 
   stores: StoreModel[];
 };
 
@@ -40,7 +39,7 @@ const TAG_COLORS: Record<string, string> = {
   "Em estoque": "bg-emerald-100 text-emerald-900 border-emerald-200 hover:bg-emerald-200",
   "Para doação": "bg-teal-100 text-teal-900 border-teal-200 hover:bg-teal-200",
   "Doada": "bg-zinc-200 text-zinc-900 border-zinc-300 hover:bg-zinc-300",
-  "Vendida": "bg-lime-100 text-lime-900 border-lime-200 hover:bg-lime-200",
+  "Vendida": "bg-lime-100 text-lime-900 border-lime-500 hover:bg-lime-200",
   "Descartada": "bg-rose-100 text-rose-900 border-rose-200 hover:bg-rose-200",
 };
 
@@ -58,71 +57,58 @@ export default function InventoryPage() {
   const [editingPiece, setEditingPiece] = useState<PieceWithRelations | null>(null);
   const [pieceToDelete, setPieceToDelete] = useState<string | null>(null);
 
-  const [catId, setCatId] = useState("");
+  const [catId, setCatId] = useState(""); 
   const [brandId, setBrandId] = useState("");
-  const [sizeId, setSizeId] = useState("");
+  const [sizeId, setSizeId] = useState(""); 
   const [colorId, setColorId] = useState("");
-  const [lotId, setLotId] = useState("");
+  const [lotId, setLotId] = useState(""); 
   const [storeId, setStoreId] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  
   const [filterTags, setFilterTags] = useState<string[]>([]);
 
   const [quickAdd, setQuickAdd] = useState({ isOpen: false, type: "", label: "" });
   const [quickAddValue, setQuickAddValue] = useState("");
 
   const isConsigned = selectedTags.includes("Em consignação");
+  const isAlreadySold = editingPiece?.tags.includes("Vendida");
+  const isNowSold = selectedTags.includes("Vendida");
+  const showSalePriceInput = !isAlreadySold && isNowSold;
 
   const loadData = async () => {
-    const [piecesData, taxonomyData] = await Promise.all([
-      getPiecesAction(mockCompanyId),
-      getTaxonomyAction(mockCompanyId)
-    ]);
-    setPieces(piecesData as PieceWithRelations[]);
-    setTaxonomy(taxonomyData as TaxonomyData);
+    const [p, t] = await Promise.all([getPiecesAction(mockCompanyId), getTaxonomyAction(mockCompanyId)]);
+    setPieces(p as PieceWithRelations[]); 
+    setTaxonomy(t as TaxonomyData);
   };
 
   useEffect(() => {
     let isMounted = true;
     const fetchInitialData = async () => {
-      const [piecesData, taxonomyData] = await Promise.all([
-        getPiecesAction(mockCompanyId),
-        getTaxonomyAction(mockCompanyId)
-      ]);
+      const [p, t] = await Promise.all([getPiecesAction(mockCompanyId), getTaxonomyAction(mockCompanyId)]);
       if (isMounted) {
-        setPieces(piecesData as PieceWithRelations[]);
-        setTaxonomy(taxonomyData as TaxonomyData);
+        setPieces(p as PieceWithRelations[]);
+        setTaxonomy(t as TaxonomyData);
       }
     };
     fetchInitialData();
     return () => { isMounted = false; };
   }, []);
 
-  const catName = taxonomy.categories.find((c: Category) => c.id === catId)?.name || "";
-  const brandName = taxonomy.brands.find((b: Brand) => b.id === brandId)?.name || "";
-  const sizeName = taxonomy.sizes.find((s: Size) => s.id === sizeId)?.name || "";
-  const colorName = taxonomy.colors.find((c: Color) => c.id === colorId)?.name || "";
-  
-  const hasSelection = catId || brandId || sizeId || colorId;
-  const autoNameParts = [catName, brandName, sizeName ? `Tamanho ${sizeName}` : "", colorName].filter(Boolean);
-  const autoName = hasSelection ? (autoNameParts.join(" ") || "Nova Peça") : "Selecione os atributos...";
-
-  const showBanner = (message: string, type: "success" | "error") => {
-    setBanner({ show: true, message, type });
+  const showBanner = (m: string, t: "success" | "error") => {
+    setBanner({ show: true, message: m, type: t }); 
     setTimeout(() => setBanner({ show: false, message: "", type: "" }), 5000);
   };
 
-  async function handleSeed() {
+  const handleSeed = async () => {
     setLoading(true);
     const result = await seedTaxonomyAction(mockCompanyId);
     setLoading(false);
     if (result.error) {
       showBanner(result.error, "error");
     } else {
-      showBanner("Categorias de teste geradas com sucesso!", "success");
+      showBanner("Carga rápida gerada com sucesso!", "success");
       await loadData();
     }
-  }
+  };
 
   const triggerQuickAdd = (type: string, label: string) => {
     setQuickAdd({ isOpen: true, type, label });
@@ -156,7 +142,14 @@ export default function InventoryPage() {
   };
 
   const toggleTag = (tag: string) => {
-    setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
+    if (tag === "Vendida") {
+      setSelectedTags(prev => prev.includes("Vendida") ? [] : ["Vendida"]);
+    } else {
+      setSelectedTags(prev => {
+        const next = prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag];
+        return next.filter(t => t !== "Vendida");
+      });
+    }
   };
 
   const toggleFilterTag = (tag: string) => {
@@ -164,14 +157,14 @@ export default function InventoryPage() {
   };
 
   const handleEditClick = (piece: PieceWithRelations) => {
-    setEditingPiece(piece);
-    setCatId(piece.categoryId);
+    setEditingPiece(piece); 
+    setCatId(piece.categoryId); 
     setBrandId(piece.brandId);
-    setSizeId(piece.sizeId || "");
-    setColorId(piece.colorId || "");
+    setSizeId(piece.sizeId || ""); 
+    setColorId(piece.colorId || ""); 
     setLotId(piece.lotId);
-    setStoreId(piece.storeId || "");
-    setSelectedTags(piece.tags || []);
+    setStoreId(piece.storeId || ""); 
+    setSelectedTags(piece.tags || []); 
     setOpen(true);
   };
 
@@ -185,54 +178,54 @@ export default function InventoryPage() {
   };
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+    event.preventDefault(); 
     setLoading(true);
-
     const formData = new FormData(event.currentTarget);
+    
+    const catName = taxonomy.categories.find(c => c.id === catId)?.name || "";
+    const brandName = taxonomy.brands.find(b => b.id === brandId)?.name || "";
+    const sizeName = taxonomy.sizes.find(s => s.id === sizeId)?.name || "";
+    const colorName = taxonomy.colors.find(c => c.id === colorId)?.name || "";
+    const autoName = [catName, brandName, sizeName ? `Tamanho ${sizeName}` : "", colorName].filter(Boolean).join(" ") || "Nova Peça";
+
     const data = {
-      name: autoName,
-      categoryId: catId,
-      brandId: brandId,
-      sizeId: sizeId,
+      name: autoName, 
+      categoryId: catId, 
+      brandId: brandId, 
+      sizeId: sizeId, 
       colorId: colorId,
-      tags: selectedTags,
-      observations: formData.get("observations") as string,
+      tags: selectedTags, 
+      observations: formData.get("observations") as string, 
       lotId: lotId,
-      storeId: isConsigned ? (storeId || null) : null,
+      storeId: isConsigned ? (storeId || null) : null, 
       purchasePrice: Number(formData.get("purchasePrice")),
+      registerSale: showSalePriceInput, 
+      salePrice: showSalePriceInput ? Number(formData.get("salePrice")) : undefined
     };
 
-    let result;
-    if (editingPiece) {
-      result = await updatePieceAction(editingPiece.id, mockCompanyId, data);
-    } else {
-      result = await createPieceAction(mockCompanyId, data);
-    }
-    
+    const result = editingPiece 
+      ? await updatePieceAction(editingPiece.id, mockCompanyId, data) 
+      : await createPieceAction(mockCompanyId, data);
+      
     setLoading(false);
 
     if (result.success) {
       handleCloseModal(false);
-      showBanner(editingPiece ? "Peça atualizada com sucesso!" : "Peça guardada com sucesso!", "success");
+      showBanner(editingPiece ? "Peça atualizada!" : "Peça guardada!", "success");
       await loadData();
     } else {
-      showBanner(result.error || "Erro ao guardar a peça.", "error");
+      showBanner(result.error || "Erro", "error");
     }
   }
 
   async function confirmDelete() {
     if (!pieceToDelete) return;
-    setLoading(true);
-    const result = await deletePieceAction(pieceToDelete, mockCompanyId);
+    setLoading(true); 
+    await deletePieceAction(pieceToDelete, mockCompanyId); 
     setLoading(false);
-    
-    if (result.success) {
-      showBanner("Peça excluída com sucesso!", "success");
-      setPieceToDelete(null);
-      await loadData();
-    } else {
-      showBanner(result.error || "Erro ao excluir.", "error");
-    }
+    showBanner("Excluída com sucesso!", "success"); 
+    setPieceToDelete(null); 
+    await loadData();
   }
 
   const formatCurrency = (val: number) =>
@@ -246,7 +239,7 @@ export default function InventoryPage() {
   return (
     <div className="space-y-8 relative">
       {banner.show && (
-        <div className={`fixed top-6 right-6 z-50 flex items-center gap-3 px-5 py-4 rounded-lg shadow-xl transition-all min-w-80 ${banner.type === "success" ? "bg-emerald-50 text-emerald-900 border border-emerald-200" : "bg-rose-50 text-rose-900 border border-rose-200"}`}>
+        <div className={`fixed top-6 right-6 z-100 flex items-center gap-3 px-5 py-4 rounded-lg shadow-xl transition-all min-w-80 ${banner.type === "success" ? "bg-emerald-50 text-emerald-900 border border-emerald-200" : "bg-rose-50 text-rose-900 border border-rose-200"}`}>
           {banner.type === "success" ? <CheckCircle2 className="w-5 h-5 text-emerald-600" /> : <AlertCircle className="w-5 h-5 text-rose-600" />}
           <span className="font-medium text-sm">{banner.message}</span>
         </div>
@@ -255,7 +248,7 @@ export default function InventoryPage() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-2">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-[#0A244A]">Minha Arara</h1>
-          <p className="text-[#4B4B4B] mt-1">Gerencie as peças de vestuário e acompanhe o fluxo através de etiquetas.</p>
+          <p className="text-[#4B4B4B] mt-1">Gerencie peças e dispare lançamentos no financeiro ao marcar como &apos;Vendida&apos;.</p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -264,7 +257,7 @@ export default function InventoryPage() {
           </Button>
 
           <Dialog open={open} onOpenChange={handleCloseModal}>
-            <DialogTrigger className={`flex items-center justify-center gap-2 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white transition-colors shadow-sm h-10 px-4 rounded-md text-sm font-medium ${taxonomy.categories.length === 0 ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}>
+            <DialogTrigger className="flex items-center justify-center gap-2 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white transition-colors shadow-sm h-10 px-4 rounded-md text-sm font-medium">
               <PlusCircle className="w-4 h-4" /> Cadastrar Peça
             </DialogTrigger>
             <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -282,7 +275,7 @@ export default function InventoryPage() {
                   </div>
                   
                   <div className="space-y-2">
-                    <Label className="text-[#0A244A]">Nome {quickAdd.type === 'store' ? 'do' : 'da'} {quickAdd.label}</Label>
+                    <Label className="text-[#0A244A]">Nome da {quickAdd.label}</Label>
                     <Input autoFocus value={quickAddValue} onChange={(e) => setQuickAddValue(e.target.value)} placeholder={`Ex: ${quickAdd.label === 'Origem' ? 'Brechó da Maria' : 'Azul Marinho'}`} />
                   </div>
 
@@ -295,29 +288,18 @@ export default function InventoryPage() {
               ) : (
                 <>
                   <DialogHeader>
-                    <DialogTitle className="text-[#0A244A]">{editingPiece ? "Editar Peça" : "Cadastrar Nova Peça"}</DialogTitle>
+                    <DialogTitle className="text-[#0A244A]">{editingPiece ? "Editar Peça" : "Cadastrar Peça"}</DialogTitle>
                     <DialogDescription className="text-[#4B4B4B]">
                       O nome e o código SKU são gerados automaticamente.
                     </DialogDescription>
                   </DialogHeader>
-                  
-                  <div className="bg-zinc-50 border border-zinc-200 rounded-lg p-3 flex items-center gap-3 mt-2">
-                    <div className="p-2 bg-white rounded shadow-sm"><Tag className="w-4 h-4 text-[#1E5AA8]" /></div>
-                    <div>
-                      <p className="text-xs text-zinc-500 font-semibold uppercase tracking-wider">
-                        {editingPiece ? `SKU: ${editingPiece.code}` : "Nome Automático"}
-                      </p>
-                      <p className="text-[#0A244A] font-bold text-lg leading-tight">{autoName}</p>
-                    </div>
-                  </div>
-
-                  <form key={editingPiece?.id || "new"} onSubmit={handleSubmit} className="space-y-6 pt-2">
+                  <form onSubmit={handleSubmit} className="space-y-6 pt-2">
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1">
                         <Label className="text-[#0A244A]">Categoria</Label>
                         <select value={catId} onChange={(e) => e.target.value === "NEW" ? triggerQuickAdd('category', 'Categoria') : setCatId(e.target.value)} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
                           <option value="">Selecione...</option>
-                          {taxonomy.categories.map((c: Category) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                          {taxonomy.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                           <option value="NEW" className="font-bold text-[#1E5AA8]">+ Cadastrar Nova Categoria</option>
                         </select>
                       </div>
@@ -325,7 +307,7 @@ export default function InventoryPage() {
                         <Label className="text-[#0A244A]">Marca</Label>
                         <select value={brandId} onChange={(e) => e.target.value === "NEW" ? triggerQuickAdd('brand', 'Marca') : setBrandId(e.target.value)} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
                           <option value="">Selecione...</option>
-                          {taxonomy.brands.map((b: Brand) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                          {taxonomy.brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                           <option value="NEW" className="font-bold text-[#1E5AA8]">+ Cadastrar Nova Marca</option>
                         </select>
                       </div>
@@ -336,7 +318,7 @@ export default function InventoryPage() {
                         <Label className="text-[#0A244A]">Tamanho</Label>
                         <select value={sizeId} onChange={(e) => e.target.value === "NEW" ? triggerQuickAdd('size', 'Tamanho') : setSizeId(e.target.value)} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
                           <option value="">Selecione...</option>
-                          {taxonomy.sizes.map((s: Size) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                          {taxonomy.sizes.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                           <option value="NEW" className="font-bold text-[#1E5AA8]">+ Cadastrar Novo Tamanho</option>
                         </select>
                       </div>
@@ -344,7 +326,7 @@ export default function InventoryPage() {
                         <Label className="text-[#0A244A]">Cor</Label>
                         <select value={colorId} onChange={(e) => e.target.value === "NEW" ? triggerQuickAdd('color', 'Cor') : setColorId(e.target.value)} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
                           <option value="">Selecione...</option>
-                          {taxonomy.colors.map((c: Color) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                          {taxonomy.colors.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                           <option value="NEW" className="font-bold text-[#1E5AA8]">+ Cadastrar Nova Cor</option>
                         </select>
                       </div>
@@ -352,10 +334,10 @@ export default function InventoryPage() {
 
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1">
-                        <Label className="text-[#0A244A]">Origem (Fornecedor)</Label>
+                        <Label className="text-[#0A244A]">Origem / Lote</Label>
                         <select value={lotId} onChange={(e) => e.target.value === "NEW" ? triggerQuickAdd('lot', 'Origem') : setLotId(e.target.value)} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
                           <option value="">Selecione...</option>
-                          {taxonomy.lots.map((l: Lot) => <option key={l.id} value={l.id}>{l.sourceName} ({l.code})</option>)}
+                          {taxonomy.lots.map(l => <option key={l.id} value={l.id}>{l.sourceName} ({l.code})</option>)}
                           <option value="NEW" className="font-bold text-[#1E5AA8]">+ Cadastrar Nova Origem</option>
                         </select>
                       </div>
@@ -366,47 +348,43 @@ export default function InventoryPage() {
                     </div>
 
                     <div className="space-y-3 bg-zinc-50/50 border border-zinc-200 rounded-lg p-4">
-                      <Label className="text-[#0A244A] flex items-center gap-2">
-                        <Tag className="w-4 h-4" /> Etiquetas de Acompanhamento
-                      </Label>
+                      <Label className="text-[#0A244A] flex items-center gap-2"><Tag className="w-4 h-4" /> Etiquetas</Label>
                       <div className="flex flex-wrap gap-2">
                         {AVAILABLE_TAGS.map(tag => (
-                          <button
-                            type="button"
-                            key={tag}
-                            onClick={() => toggleTag(tag)}
-                            className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-all cursor-pointer ${
-                              selectedTags.includes(tag) 
-                                ? TAG_COLORS[tag] 
-                                : "bg-white text-zinc-500 border-zinc-200 hover:bg-zinc-100"
-                            }`}
-                          >
+                          <button type="button" key={tag} onClick={() => toggleTag(tag)} className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-all cursor-pointer ${selectedTags.includes(tag) ? TAG_COLORS[tag] : "bg-white text-zinc-500 border-zinc-200 hover:bg-zinc-100"}`}>
                             {tag}
                           </button>
                         ))}
                       </div>
                       
                       {isConsigned && (
-                        <div className="pt-4 border-t border-zinc-200 mt-4 animate-in slide-in-from-top-2">
-                          <Label className="text-purple-900 mb-2 block flex items-center gap-2">
-                            <Store className="w-4 h-4" /> Parceiro (Local de Consignação)
-                          </Label>
-                          <select value={storeId} onChange={(e) => e.target.value === "NEW" ? triggerQuickAdd('store', 'Parceiro') : setStoreId(e.target.value)} className="w-full h-10 px-3 rounded-md border border-purple-200 bg-purple-50 text-sm focus:ring-purple-500" required={isConsigned}>
-                            <option value="">Onde a peça está consignada?</option>
-                            {taxonomy.stores.map((st: StoreModel) => <option key={st.id} value={st.id}>{st.name}</option>)}
+                        <div className="pt-4 border-t border-zinc-200 mt-4">
+                          <Label className="text-purple-900 mb-2 block">Parceiro (Consignação)</Label>
+                          <select value={storeId} onChange={(e) => e.target.value === "NEW" ? triggerQuickAdd('store', 'Parceiro') : setStoreId(e.target.value)} className="w-full h-10 px-3 rounded-md border border-purple-200 bg-purple-50 text-sm" required={isConsigned}>
+                            <option value="">Onde está a peça?</option>
+                            {taxonomy.stores.map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
                             <option value="NEW" className="font-bold text-purple-700">+ Cadastrar Novo Parceiro</option>
                           </select>
+                        </div>
+                      )}
+
+                      {showSalePriceInput && (
+                        <div className="pt-4 border-t border-zinc-200 mt-4 animate-in slide-in-from-top-2">
+                          <div className="bg-lime-50 border border-lime-200 p-4 rounded-md">
+                            <Label htmlFor="salePrice" className="text-lime-900 font-bold mb-2 block">Valor Efetivo da Venda (R$)</Label>
+                            <Input id="salePrice" name="salePrice" type="number" step="0.01" min="0" required={showSalePriceInput} placeholder="Será lançado automaticamente nas Receitas..." className="bg-white border-lime-300 focus-visible:ring-lime-500" />
+                          </div>
                         </div>
                       )}
                     </div>
 
                     <div className="space-y-1">
-                      <Label htmlFor="observations" className="text-[#0A244A]">Observações (Opcional)</Label>
+                      <Label htmlFor="observations" className="text-[#0A244A]">Observações</Label>
                       <Input id="observations" name="observations" defaultValue={editingPiece?.observations || ""} placeholder="Ex: Fio puxado na manga direita..." />
                     </div>
 
                     <Button type="submit" className="w-full mt-4 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white h-11 text-base shadow-sm" disabled={loading}>
-                      {loading ? "A processar..." : (editingPiece ? "Salvar Alterações" : "Guardar Peça na Arara")}
+                      {loading ? "A processar..." : "Salvar Alterações"}
                     </Button>
                   </form>
                 </>
@@ -472,18 +450,18 @@ export default function InventoryPage() {
               {pieces.length === 0 ? "Nenhuma peça na sua Arara" : "Nenhuma peça encontrada com estas etiquetas"}
             </h3>
             <p className="text-sm text-[#4B4B4B] max-w-sm mt-1">
-              {pieces.length === 0 ? "Clique em 'Carga Rápida' para gerar os atributos base e começar." : "Tente remover alguns filtros para ver mais resultados."}
+              {pieces.length === 0 ? "Clique em &apos;Carga Rápida&apos; para gerar os atributos base e começar." : "Tente remover alguns filtros para ver mais resultados."}
             </p>
           </div>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-30">SKU</TableHead>
+                <TableHead className="w-32">SKU</TableHead>
                 <TableHead>Produto</TableHead>
                 <TableHead>Etiquetas</TableHead>
                 <TableHead className="text-right">Custo</TableHead>
-                <TableHead className="text-right w-25">Ações</TableHead>
+                <TableHead className="text-right w-24">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -493,7 +471,7 @@ export default function InventoryPage() {
                   <TableCell>
                     <div className="flex flex-col">
                       <span className="font-medium text-[#0A244A]">{piece.name}</span>
-                      <span className="text-xs text-zinc-500 truncate max-w-62.5">
+                      <span className="text-xs text-zinc-500 truncate w-64">
                         Origem: {piece.lot?.sourceName}
                       </span>
                       {piece.observations && (
@@ -509,7 +487,7 @@ export default function InventoryPage() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="flex flex-wrap gap-1.5 max-w-75">
+                    <div className="flex flex-wrap gap-1.5 max-w-xs">
                       {piece.tags && piece.tags.length > 0 ? (
                         piece.tags.map(tag => (
                           <Badge key={tag} className={`font-normal px-2 py-0.5 text-[10px] ${TAG_COLORS[tag] || "bg-zinc-100 text-zinc-800"}`}>

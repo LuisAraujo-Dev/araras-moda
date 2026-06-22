@@ -1,4 +1,3 @@
-//src/app/(dashboard)/dashboard/consignments/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -175,6 +174,7 @@ export default function ConsignmentsPage() {
     setLoading(true);
     const formData = new FormData(event.currentTarget);
     const expectedReturnDateRaw = formData.get("expectedReturnDate") as string;
+    const shippingCostRaw = formData.get("shippingCost");
     
     const data = {
       storeId: storeId,
@@ -186,6 +186,7 @@ export default function ConsignmentsPage() {
         status: info.status,
         reason: info.reason
       })),
+      shippingCost: shippingCostRaw ? Number(shippingCostRaw) : 0,
     };
 
     let result;
@@ -357,13 +358,19 @@ export default function ConsignmentsPage() {
                   </div>
                 </div>
 
-                <div className="space-y-1">
-                  <Label htmlFor="status" className="text-[#0A244A]">Status da Remessa</Label>
-                  <select id="status" name="status" defaultValue={editingConsignment?.status || "ACTIVE"} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
-                    {Object.entries(STATUS_MAP).map(([key, { label }]) => (
-                      <option key={key} value={key}>{label}</option>
-                    ))}
-                  </select>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <Label htmlFor="status" className="text-[#0A244A]">Status da Remessa</Label>
+                    <select id="status" name="status" defaultValue={editingConsignment?.status || "ACTIVE"} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
+                      {Object.entries(STATUS_MAP).map(([key, { label }]) => (
+                        <option key={key} value={key}>{label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="shippingCost" className="text-[#0A244A]">Custo Envio / Uber (R$) - Opcional</Label>
+                    <Input id="shippingCost" name="shippingCost" type="number" step="0.01" min="0" placeholder="Lançado nas despesas" />
+                  </div>
                 </div>
 
                 <Button type="submit" className="w-full mt-4 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white h-11 text-base shadow-sm" disabled={loading}>
