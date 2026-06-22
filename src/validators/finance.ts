@@ -7,6 +7,8 @@ export const createRevenueSchema = z.object({
   date: z.coerce.date({ message: "A data é obrigatória ou inválida" }),
 });
 
+export type CreateRevenueInput = z.infer<typeof createRevenueSchema>;
+
 export const createExpenseSchema = z.object({
   amount: z.number().positive({ message: "O valor deve ser maior que zero" }),
   category: z.string().min(1, { message: "A categoria da despesa é obrigatória" }),
@@ -14,3 +16,5 @@ export const createExpenseSchema = z.object({
   date: z.coerce.date({ message: "A data é obrigatória ou inválida" }),
   isApportioned: z.boolean().optional(),
 });
+
+export type CreateExpenseInput = z.infer<typeof createExpenseSchema>;
