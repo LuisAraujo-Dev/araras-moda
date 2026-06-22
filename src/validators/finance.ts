@@ -1,20 +1,16 @@
 import { z } from "zod";
-import { RevenueType, ExpenseCategory } from "@prisma/client";
 
 export const createRevenueSchema = z.object({
   amount: z.number().positive({ message: "O valor deve ser maior que zero" }),
-  type: z.nativeEnum(RevenueType, { message: "Tipo de receita inválido" }),
-  description: z.string().optional(),
-  date: z.coerce.date({ message: "Data inválida" }),
+  type: z.string().min(1, { message: "A categoria da receita é obrigatória" }),
+  description: z.string().optional().nullable(),
+  date: z.coerce.date({ message: "A data é obrigatória ou inválida" }),
 });
 
 export const createExpenseSchema = z.object({
   amount: z.number().positive({ message: "O valor deve ser maior que zero" }),
-  category: z.nativeEnum(ExpenseCategory, { message: "Categoria de despesa inválida" }),
-  description: z.string().optional(),
-  date: z.coerce.date({ message: "Data inválida" }),
-  pieceIdsToApportion: z.array(z.string()).optional(),
+  category: z.string().min(1, { message: "A categoria da despesa é obrigatória" }),
+  description: z.string().optional().nullable(),
+  date: z.coerce.date({ message: "A data é obrigatória ou inválida" }),
+  isApportioned: z.boolean().optional(),
 });
-
-export type CreateRevenueInput = z.infer<typeof createRevenueSchema>;
-export type CreateExpenseInput = z.infer<typeof createExpenseSchema>;
