@@ -15,6 +15,7 @@ export const createExpenseSchema = z.object({
   description: z.string().optional().nullable(),
   date: z.coerce.date({ message: "A data é obrigatória ou inválida" }),
   isApportioned: z.boolean().optional(),
+  pieceIdsToApportion: z.array(z.string()).optional(),
 });
 
 export type CreateExpenseInput = z.infer<typeof createExpenseSchema>;
