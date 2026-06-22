@@ -16,11 +16,6 @@ export async function getLotsAction(companyId: string) {
     const realId = await getRealCompanyId(companyId);
     return await prisma.lot.findMany({
       where: { companyId: realId },
-      include: {
-        _count: {
-          select: { pieces: true }
-        }
-      },
       orderBy: { purchaseDate: "desc" },
     });
   } catch (error) {
@@ -45,7 +40,7 @@ export async function createLotAction(companyId: string, data: CreateLotInput) {
     
     const finalCode = data.code.trim() !== "" 
       ? data.code 
-      : `LT-${Math.floor(100000 + Math.random() * 900000)}`;
+      : `AQ-${Math.floor(100000 + Math.random() * 900000)}`;
 
     await prisma.lot.create({
       data: {
@@ -63,7 +58,7 @@ export async function createLotAction(companyId: string, data: CreateLotInput) {
     return { success: true };
   } catch (error) {
     console.error(error);
-    return { error: "Falha ao cadastrar a origem." };
+    return { error: "Falha ao cadastrar a aquisição." };
   }
 }
 
@@ -86,7 +81,7 @@ export async function updateLotAction(lotId: string, companyId: string, data: Cr
     return { success: true };
   } catch (error) {
     console.error(error);
-    return { error: "Falha ao atualizar a origem." };
+    return { error: "Falha ao atualizar a aquisição." };
   }
 }
 
@@ -100,6 +95,6 @@ export async function deleteLotAction(lotId: string, companyId: string) {
     return { success: true };
   } catch (error) {
     console.error(error);
-    return { error: "Falha ao excluir a origem. Verifique se existem peças vinculadas a ela." };
+    return { error: "Falha ao excluir a aquisição. Verifique se existem peças vinculadas a ela." };
   }
 }

@@ -1,3 +1,4 @@
+//src/app/(dashboard)/dashboard/layout.tsx
 "use client";
 
 import Link from "next/link";
@@ -17,8 +18,8 @@ import { signOut } from "next-auth/react";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { name: "Aquisições", href: "/dashboard/lots", icon: Layers },
   { name: "Estoque", href: "/dashboard/inventory", icon: Package },
-  { name: "Lotes", href: "/dashboard/lots", icon: Layers },
   { name: "Consignações", href: "/dashboard/consignments", icon: Handshake },
   { name: "Parceiros", href: "/dashboard/stores", icon: Store },
   { name: "Financeiro", href: "/dashboard/finance", icon: DollarSign },
@@ -69,7 +70,7 @@ export default function DashboardLayout({
         <div className="p-4 border-t border-zinc-800">
           <button
             onClick={() => signOut({ callbackUrl: "/login" })}
-            className="flex w-full items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:bg-zinc-900 hover:text-rose-400 transition-colors"
+            className="flex w-full items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:bg-zinc-900 hover:text-rose-400 transition-colors cursor-pointer"
           >
             <LogOut className="w-4 h-4" />
             Sair do Sistema
