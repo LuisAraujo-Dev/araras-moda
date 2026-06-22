@@ -88,10 +88,10 @@ export default function LotsPage() {
 
     if (result.success) {
       handleCloseModal(false);
-      showBanner(editingLot ? "Origem atualizada com sucesso!" : "Origem cadastrada com sucesso!", "success");
+      showBanner(editingLot ? "Lote atualizado com sucesso!" : "Lote cadastrado com sucesso!", "success");
       await loadData();
     } else {
-      showBanner(result.error || "Erro ao guardar a origem.", "error");
+      showBanner(result.error || "Erro ao guardar o lote.", "error");
     }
   }
 
@@ -102,7 +102,7 @@ export default function LotsPage() {
     setLoading(false);
     
     if (result.success) {
-      showBanner("Origem excluída com sucesso!", "success");
+      showBanner("Lote excluído com sucesso!", "success");
       setLotToDelete(null);
       await loadData();
     } else {
@@ -128,31 +128,31 @@ export default function LotsPage() {
 
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-2">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-[#0A244A]">Origens / Lotes</h1>
-          <p className="text-[#4B4B4B] mt-1">Gira os seus fornecedores, garimpos e lotes de peças compradas.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-[#0A244A]">Lotes de Compra</h1>
+          <p className="text-[#4B4B4B] mt-1">Gira os fardos, sacolas e garimpos adquiridos para o estoque.</p>
         </div>
 
         <div className="flex items-center gap-3">
           <Dialog open={open} onOpenChange={handleCloseModal}>
             <DialogTrigger className="flex items-center justify-center gap-2 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white transition-colors shadow-sm h-10 px-4 rounded-md text-sm font-medium">
-              <PlusCircle className="w-4 h-4" /> Cadastrar Origem
+              <PlusCircle className="w-4 h-4" /> Cadastrar Lote
             </DialogTrigger>
             <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle className="text-[#0A244A]">{editingLot ? "Editar Origem" : "Cadastrar Nova Origem"}</DialogTitle>
+                <DialogTitle className="text-[#0A244A]">{editingLot ? "Editar Lote" : "Cadastrar Novo Lote"}</DialogTitle>
                 <DialogDescription className="text-[#4B4B4B]">
-                  Preencha os dados do garimpo, bazar ou fornecedor.
+                  Preencha os dados do garimpo, bazar ou fornecedor onde as peças foram compradas.
                 </DialogDescription>
               </DialogHeader>
 
               <form key={editingLot?.id || "new"} onSubmit={handleSubmit} className="space-y-6 pt-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <Label htmlFor="sourceName" className="text-[#0A244A]">Nome da Origem</Label>
+                    <Label htmlFor="sourceName" className="text-[#0A244A]">Fornecedor / Local do Garimpo</Label>
                     <Input id="sourceName" name="sourceName" placeholder="Ex: Bazar Beneficente do Centro" defaultValue={editingLot?.sourceName || ""} required autoFocus />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="sourceType" className="text-[#0A244A]">Tipo de Origem</Label>
+                    <Label htmlFor="sourceType" className="text-[#0A244A]">Tipo de Fornecedor</Label>
                     <select id="sourceType" name="sourceType" defaultValue={editingLot?.sourceType || ""} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
                       <option value="">Selecione...</option>
                       {SOURCE_TYPES.map(type => (
@@ -190,7 +190,7 @@ export default function LotsPage() {
                 </div>
 
                 <Button type="submit" className="w-full mt-4 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white h-11 text-base shadow-sm" disabled={loading}>
-                  {loading ? "A processar..." : (editingLot ? "Salvar Alterações" : "Guardar Origem")}
+                  {loading ? "A processar..." : (editingLot ? "Salvar Alterações" : "Guardar Lote")}
                 </Button>
               </form>
             </DialogContent>
@@ -203,7 +203,7 @@ export default function LotsPage() {
                   <AlertCircle className="w-5 h-5" /> Confirmar Exclusão
                 </DialogTitle>
                 <DialogDescription className="text-zinc-600 mt-3 text-base">
-                  Tem certeza que deseja excluir esta origem? Se houverem peças cadastradas vinculadas a ela, a exclusão será bloqueada pelo banco de dados.
+                  Tem certeza que deseja excluir este lote? Se existirem peças vinculadas a ele no estoque, a exclusão será bloqueada para evitar quebras.
                 </DialogDescription>
               </DialogHeader>
               <div className="flex gap-3 mt-4">
@@ -221,9 +221,9 @@ export default function LotsPage() {
         {lots.length === 0 ? (
           <div className="p-16 text-center flex flex-col items-center justify-center">
             <Layers className="w-12 h-12 text-[#1E5AA8]/30 mb-4" />
-            <h3 className="text-lg font-semibold text-[#0A244A]">Nenhuma origem cadastrada</h3>
+            <h3 className="text-lg font-semibold text-[#0A244A]">Nenhum lote cadastrado</h3>
             <p className="text-sm text-[#4B4B4B] max-w-sm mt-1">
-              Comece cadastrando garimpos, bazares ou lotes comprados de fornecedores.
+              Comece cadastrando garimpos, bazares ou fardos fechados comprados para a loja.
             </p>
           </div>
         ) : (
@@ -231,9 +231,9 @@ export default function LotsPage() {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-32">Código</TableHead>
-                <TableHead>Origem / Fornecedor</TableHead>
+                <TableHead>Fornecedor / Garimpo</TableHead>
                 <TableHead>Data Compra</TableHead>
-                <TableHead className="text-center">Progresso (Peças)</TableHead>
+                <TableHead>Cadastro de Peças</TableHead>
                 <TableHead className="text-right">Custo Total</TableHead>
                 <TableHead className="text-right w-24">Ações</TableHead>
               </TableRow>
@@ -253,14 +253,14 @@ export default function LotsPage() {
                   <TableCell className="text-[#4B4B4B] text-sm">
                     {formatDate(lot.purchaseDate)}
                   </TableCell>
-                  <TableCell className="text-center">
-                    <div className="flex flex-col items-center">
-                      <span className="text-sm font-medium text-[#0A244A]">
-                        {lot._count.pieces} / {lot.quantity}
+                  <TableCell>
+                    <div className="flex flex-col max-w-40">
+                      <span className="text-xs font-medium text-[#4B4B4B] mb-1">
+                        {lot._count.pieces} cadastradas (de {lot.quantity})
                       </span>
-                      <div className="w-24 h-1.5 bg-zinc-100 rounded-full mt-1 overflow-hidden">
+                      <div className="w-full h-1.5 bg-zinc-100 rounded-full overflow-hidden">
                         <div 
-                          className="h-full bg-[#F4C21A] rounded-full" 
+                          className="h-full bg-[#1E5AA8] rounded-full" 
                           style={{ width: `${Math.min(100, (lot._count.pieces / lot.quantity) * 100)}%` }} 
                         />
                       </div>
@@ -271,10 +271,10 @@ export default function LotsPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
-                      <button onClick={() => handleEditClick(lot)} className="p-2 text-zinc-400 hover:text-[#1E5AA8] hover:bg-blue-50 rounded-md transition-colors cursor-pointer" title="Editar Origem">
+                      <button onClick={() => handleEditClick(lot)} className="p-2 text-zinc-400 hover:text-[#1E5AA8] hover:bg-blue-50 rounded-md transition-colors cursor-pointer" title="Editar Lote">
                         <Pencil className="w-4 h-4" />
                       </button>
-                      <button onClick={() => setLotToDelete(lot.id)} className="p-2 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer" title="Excluir Origem">
+                      <button onClick={() => setLotToDelete(lot.id)} className="p-2 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer" title="Excluir Lote">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
