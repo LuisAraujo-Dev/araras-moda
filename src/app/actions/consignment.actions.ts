@@ -18,6 +18,13 @@ export async function getConsignmentsAction(companyId: string) {
       where: { companyId: realId },
       include: {
         store: true,
+        items: {
+          include: {
+            piece: {
+              select: { code: true, name: true }
+            }
+          }
+        },
         _count: {
           select: { items: true }
         }
@@ -43,9 +50,18 @@ export async function getStoresAction(companyId: string) {
   }
 }
 
-export async function quickAddStoreAction(companyId: string, name: string) {
-  const realId = await getRealCompanyId(companyId);
-  return prisma.store.create({ data: { name, commissionPercentage: 50, companyId: realId } });
+export async function getAvailablePiecesAction(companyId: string) {
+  try {
+    const realId = await getRealCompanyId(companyId);
+    return await prisma.piece.findMany({
+      where: { companyId: realId },
+      select: { id: true, code: true, name: true, purchasePrice: true, estimatedSalePrice: true },
+      orderBy: { createdAt: "desc" },
+    });
+  } catch (error) {
+    console.error(error);
+    return [];
+  }
 }
 
 type CreateConsignmentInput = {
@@ -53,11 +69,17 @@ type CreateConsignmentInput = {
   startDate: Date;
   expectedReturnDate: Date | null;
   status: ConsignmentStatus;
+  pieceIds: string[];
 };
 
 export async function createConsignmentAction(companyId: string, data: CreateConsignmentInput) {
   try {
     const realId = await getRealCompanyId(companyId);
+    
+    const pieces = await prisma.piece.findMany({
+      where: { id: { in: data.pieceIds }, companyId: realId }
+    });
+
     await prisma.consignment.create({
       data: {
         storeId: data.storeId,
@@ -65,8 +87,22 @@ export async function createConsignmentAction(companyId: string, data: CreateCon
         expectedReturnDate: data.expectedReturnDate,
         status: data.status,
         companyId: realId,
+        items: {
+          create: pieces.map(p => ({
+            pieceId: p.id,
+            listedPrice: p.estimatedSalePrice > 0 ? p.estimatedSalePrice : p.purchasePrice
+          }))
+        }
       },
     });
+
+    if (data.pieceIds.length > 0) {
+      await prisma.piece.updateMany({
+        where: { id: { in: data.pieceIds }, companyId: realId },
+        data: { storeId: data.storeId, status: "CONSIGNADA" }
+      });
+    }
+
     revalidatePath("/dashboard/consignments");
     return { success: true };
   } catch (error) {
@@ -78,6 +114,15 @@ export async function createConsignmentAction(companyId: string, data: CreateCon
 export async function updateConsignmentAction(consignmentId: string, companyId: string, data: CreateConsignmentInput) {
   try {
     const realId = await getRealCompanyId(companyId);
+    
+    await prisma.consignmentItem.deleteMany({
+      where: { consignmentId: consignmentId }
+    });
+
+    const pieces = await prisma.piece.findMany({
+      where: { id: { in: data.pieceIds }, companyId: realId }
+    });
+
     await prisma.consignment.update({
       where: { id: consignmentId, companyId: realId },
       data: {
@@ -85,8 +130,22 @@ export async function updateConsignmentAction(consignmentId: string, companyId: 
         startDate: data.startDate,
         expectedReturnDate: data.expectedReturnDate,
         status: data.status,
+        items: {
+          create: pieces.map(p => ({
+            pieceId: p.id,
+            listedPrice: p.estimatedSalePrice > 0 ? p.estimatedSalePrice : p.purchasePrice
+          }))
+        }
       },
     });
+
+    if (data.pieceIds.length > 0) {
+      await prisma.piece.updateMany({
+        where: { id: { in: data.pieceIds }, companyId: realId },
+        data: { storeId: data.storeId, status: "CONSIGNADA" }
+      });
+    }
+
     revalidatePath("/dashboard/consignments");
     return { success: true };
   } catch (error) {
@@ -105,6 +164,6 @@ export async function deleteConsignmentAction(consignmentId: string, companyId: 
     return { success: true };
   } catch (error) {
     console.error(error);
-    return { error: "Falha ao excluir a remessa. Verifique se existem peças vinculadas a ela." };
+    return { error: "Falha ao excluir a remessa. Verifique se existem peças pendentes de acerto." };
   }
 }
