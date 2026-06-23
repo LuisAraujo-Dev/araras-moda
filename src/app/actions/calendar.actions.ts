@@ -9,16 +9,31 @@ async function getRealCompanyId(providedId: string) {
   return company?.id || providedId;
 }
 
-export async function getCalendarEventsAction(companyId: string) {
+export async function getCalendarPageDataAction(companyId: string) {
   try {
     const realId = await getRealCompanyId(companyId);
-    return await prisma.calendarEvent.findMany({
-      where: { companyId: realId },
-      orderBy: { startDate: "asc" },
-    });
+    
+    const [events, stores, lots] = await Promise.all([
+      prisma.calendarEvent.findMany({ where: { companyId: realId }, orderBy: { startDate: "asc" } }),
+      prisma.store.findMany({ where: { companyId: realId }, orderBy: { name: "asc" } }),
+      prisma.lot.findMany({ where: { companyId: realId }, orderBy: { purchaseDate: "desc" } })
+    ]);
+
+    const dynamicTypes = Array.from(new Set(events.map(e => e.type)));
+
+    return { 
+      success: true, 
+      events: events.map(e => ({
+        ...e,
+        startDate: e.startDate // Mantém o objeto de data nativo
+      })), 
+      stores: stores.map(s => ({ id: s.id, name: s.name, address: s.address })), 
+      lots: lots.map(l => ({ id: l.id, code: l.code, sourceName: l.sourceName })),
+      dynamicTypes 
+    };
   } catch (error) {
     console.error(error);
-    return [];
+    return { success: false, events: [], stores: [], lots: [], dynamicTypes: [] };
   }
 }
 
