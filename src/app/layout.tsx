@@ -1,13 +1,26 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { Providers } from "../components/ui/providers";
-// Fonte limpa e profissional para sistemas SaaS
+
 const inter = Inter({ subsets: ["latin"] });
 
+export const viewport: Viewport = {
+  themeColor: "#1E5AA8",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false, 
+};
+
 export const metadata: Metadata = {
-  title: "Araras Moda | Gestão de Curadoria",
-  description: "Plataforma inteligente de gestão para operações de moda, curadoria e consignação.",
+  title: "Araras Moda",
+  description: "Gestão inteligente de brechó e acervo.",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Araras Moda",
+  },
 };
 
 export default function RootLayout({
@@ -16,12 +29,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="pt-BR" suppressHydrationWarning>
-      <body className={`${inter.className} antialiased bg-zinc-50 text-zinc-900`}>
-        <Providers>
-          {children}
-        </Providers>
-      </body>
+    <html lang="pt">
+      <body className={inter.className}>{children}</body>
     </html>
   );
 }
