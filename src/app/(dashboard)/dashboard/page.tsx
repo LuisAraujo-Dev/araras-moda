@@ -12,11 +12,14 @@ import {
   AlertTriangle, 
   ArrowRight,
   MapPin,
-  CheckCircle2
+  CheckCircle2,
+  Circle,
+  Boxes
 } from "lucide-react";
-import { getDashboardDataAction } from "@/app/actions/dashboard.actions";
+import { getDashboardDataAction, toggleEventCompletionAction } from "@/app/actions/dashboard.actions";
 
 type DashboardData = {
+  userName: string;
   kpis: {
     activePieces: number;
     activeConsignments: number;
@@ -30,6 +33,7 @@ type DashboardData = {
     startDate: Date;
     isAllDay: boolean;
     type: string;
+    isCompleted: boolean;
   }>;
   expiringConsignments: Array<{
     id: string;
@@ -46,16 +50,32 @@ export default function DashboardHomePage() {
 
   useEffect(() => {
     let isMounted = true;
+    
     const fetchDashboard = async () => {
       const result = await getDashboardDataAction();
-      if (isMounted && result.success && result.data) {
-        setData(result.data as DashboardData);
+      if (isMounted) {
+        if (result.success && result.data) {
+          setData(result.data as DashboardData);
+        }
+        setLoading(false);
       }
-      if (isMounted) setLoading(false);
     };
+    
     fetchDashboard();
+    
     return () => { isMounted = false; };
   }, []);
+
+  const handleToggleEvent = async (eventId: string, currentStatus: boolean) => {
+    if (data) {
+      const updatedEvents = data.todayEvents.map(ev => 
+        ev.id === eventId ? { ...ev, isCompleted: !currentStatus } : ev
+      );
+      setData({ ...data, todayEvents: updatedEvents });
+    }
+    
+    await toggleEventCompletionAction(eventId, !currentStatus);
+  };
 
   const formatCurrency = (val: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
@@ -71,7 +91,7 @@ export default function DashboardHomePage() {
     return (
       <div className="flex h-64 items-center justify-center">
         <p className="text-zinc-500 font-medium animate-pulse flex items-center gap-2">
-          <Bell className="w-5 h-5 text-[#1E5AA8]" /> A carregar o seu centro de comando...
+          <Bell className="w-5 h-5 text-[#1E5AA8]" /> A preparar o seu painel de controlo...
         </p>
       </div>
     );
@@ -81,10 +101,10 @@ export default function DashboardHomePage() {
 
   return (
     <div className="space-y-8">
-      {/* Cabeçalho de Boas-vindas */}
+      {/* Cabeçalho Personalizado */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-2">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-[#0A244A]">Olá, Gestor 👋</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-[#0A244A]">Olá, {data.userName} 👋</h1>
           <p className="text-[#4B4B4B] mt-1">Este é o resumo da sua operação na Araras Moda hoje.</p>
         </div>
         <Link href="/dashboard/calendar" className="flex items-center gap-2 bg-white border border-zinc-200 text-[#0A244A] px-4 py-2 rounded-lg text-sm font-medium hover:bg-zinc-50 transition-colors shadow-sm">
@@ -134,23 +154,28 @@ export default function DashboardHomePage() {
         </Link>
       </div>
 
-      {/* Módulos de Notificações e Alertas */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         
-        {/* Painel Esquerdo: Agenda de Hoje */}
+        {/* Painel Esquerdo: Agenda de Hoje Interativa */}
         <div className="bg-white rounded-xl border border-zinc-200 shadow-sm overflow-hidden flex flex-col h-100">
-          <div className="p-5 border-b border-zinc-200 bg-zinc-50/50 flex items-center gap-3">
-            <div className="relative">
-              <CalendarIcon className="w-5 h-5 text-[#1E5AA8]" />
-              {data.todayEvents.length > 0 && (
-                <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
-                </span>
-              )}
+          <div className="p-5 border-b border-zinc-200 bg-zinc-50/50 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <CalendarIcon className="w-5 h-5 text-[#1E5AA8]" />
+                {data.todayEvents.filter(e => !e.isCompleted).length > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
+                  </span>
+                )}
+              </div>
+              <h3 className="font-semibold text-[#0A244A]">Agenda para Hoje</h3>
             </div>
-            <h3 className="font-semibold text-[#0A244A]">Agenda para Hoje</h3>
+            <span className="text-xs font-bold bg-zinc-200 text-zinc-600 px-2 py-0.5 rounded-full">
+              {data.todayEvents.filter(e => e.isCompleted).length} / {data.todayEvents.length} Concluídos
+            </span>
           </div>
+          
           <div className="p-5 flex-1 overflow-y-auto space-y-3 custom-scrollbar">
             {data.todayEvents.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center">
@@ -162,23 +187,60 @@ export default function DashboardHomePage() {
               </div>
             ) : (
               data.todayEvents.map(event => (
-                <div key={event.id} className="border border-zinc-100 rounded-lg p-3 bg-zinc-50/50 hover:bg-white transition-colors">
-                  <div className="flex justify-between items-start gap-2">
-                    <h4 className="font-bold text-sm text-[#0A244A] leading-tight">{event.title}</h4>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 whitespace-nowrap">
-                      {event.type}
-                    </span>
-                  </div>
-                  <div className="flex flex-col gap-1 mt-2 text-xs text-zinc-500">
-                    <span className="flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5" />
-                      {event.isAllDay ? "Dia Todo" : new Date(event.startDate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                    {event.location && event.location !== "Não definido" && (
-                      <span className="flex items-center gap-1.5 text-zinc-600 font-medium">
-                        <MapPin className="w-3.5 h-3.5 text-zinc-400" /> {event.location}
-                      </span>
-                    )}
+                <div key={event.id} className={`border rounded-lg p-3 transition-all ${event.isCompleted ? 'bg-zinc-50 border-zinc-200 opacity-60' : 'bg-white hover:bg-zinc-50/80 border-zinc-200 shadow-sm'}`}>
+                  
+                  <div className="flex items-start gap-3">
+                    <button 
+                      onClick={() => handleToggleEvent(event.id, event.isCompleted)}
+                      className={`mt-0.5 shrink-0 transition-colors cursor-pointer ${event.isCompleted ? 'text-emerald-500 hover:text-emerald-600' : 'text-zinc-300 hover:text-[#1E5AA8]'}`}
+                    >
+                      {event.isCompleted ? <CheckCircle2 className="w-5 h-5" /> : <Circle className="w-5 h-5" />}
+                    </button>
+                    
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between items-start gap-2">
+                        <h4 className={`font-bold text-sm leading-tight ${event.isCompleted ? 'text-zinc-500 line-through' : 'text-[#0A244A]'}`}>
+                          {event.title}
+                        </h4>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 whitespace-nowrap">
+                          {event.type}
+                        </span>
+                      </div>
+                      
+                      <div className="flex flex-col gap-1 mt-1.5 text-xs text-zinc-500">
+                        <span className="flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5" />
+                          {event.isAllDay ? "Dia Todo" : new Date(event.startDate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                        {event.location && event.location !== "Não definido" && (
+                          <span className="flex items-center gap-1.5 text-zinc-600 font-medium">
+                            <MapPin className="w-3.5 h-3.5 text-zinc-400" /> {event.location}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Botões de Ação Contextual (Apenas visíveis se o evento não estiver concluído) */}
+                      {!event.isCompleted && (
+                        <div className="mt-3 pt-3 border-t border-zinc-100 flex flex-wrap gap-2">
+                          {(event.type === "Bazar" || event.type === "Ida ao Parceiro") && (
+                            <Link href="/dashboard/consignments" className="flex items-center gap-1.5 text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 px-2.5 py-1.5 rounded-md transition-colors border border-purple-200">
+                              <Handshake className="w-3.5 h-3.5" /> Lançar Remessa
+                            </Link>
+                          )}
+                          {(event.type === "Lavagem de Lote") && (
+                            <Link href="/dashboard/lots" className="flex items-center gap-1.5 text-xs font-medium text-cyan-700 bg-cyan-50 hover:bg-cyan-100 px-2.5 py-1.5 rounded-md transition-colors border border-cyan-200">
+                              <Boxes className="w-3.5 h-3.5" /> Ver Aquisições
+                            </Link>
+                          )}
+                          {(event.type === "Postar Peças" || event.type === "Manutenção das Peças") && (
+                            <Link href="/dashboard/inventory" className="flex items-center gap-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-md transition-colors border border-blue-200">
+                              <Package className="w-3.5 h-3.5" /> Atualizar Estoque
+                            </Link>
+                          )}
+                        </div>
+                      )}
+
+                    </div>
                   </div>
                 </div>
               ))
