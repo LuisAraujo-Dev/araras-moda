@@ -514,7 +514,7 @@ export default function CalendarPage() {
               {loading ? "A processar..." : "Sim, Cancelar"}
             </Button>
           </div>
-        </DialogContent>
+        </DialogContent>    
       </Dialog>
     </div>
   );
