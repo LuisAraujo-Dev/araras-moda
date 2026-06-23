@@ -6,96 +6,86 @@ import { usePathname } from "next/navigation";
 import { 
   LayoutDashboard, 
   Package, 
-  Layers, 
   Handshake, 
   Store, 
   DollarSign, 
   BarChart3, 
-  Settings, 
-  LogOut 
+  Settings,
+  Calendar,
+  Boxes
 } from "lucide-react";
-import { signOut } from "next-auth/react";
 
-const navigation = [
+const navigationItems = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Aquisições", href: "/dashboard/lots", icon: Layers },
   { name: "Estoque", href: "/dashboard/inventory", icon: Package },
+  { name: "Aquisições / Lotes", href: "/dashboard/lots", icon: Boxes },
   { name: "Consignações", href: "/dashboard/consignments", icon: Handshake },
   { name: "Parceiros", href: "/dashboard/stores", icon: Store },
+  { name: "Calendário", href: "/dashboard/calendar", icon: Calendar },
   { name: "Financeiro", href: "/dashboard/finance", icon: DollarSign },
   { name: "Relatórios", href: "/dashboard/reports", icon: BarChart3 },
   { name: "Configurações", href: "/dashboard/settings", icon: Settings },
 ];
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   return (
-    <div className="min-h-screen flex bg-zinc-50">
-      <aside className="w-64 bg-[#0A244A] text-zinc-200 flex flex-col justify-between border-r border-[#103A73]">
-        <div className="px-4 py-6">
-          <div className="flex items-center gap-2 px-2 mb-8">
-            <div className="p-2 bg-[#F4C21A] rounded-lg text-[#0A244A] font-bold text-sm shadow-sm">
-              AM
-            </div>
-            <span className="text-lg font-bold tracking-tight text-white">Araras Moda</span>
-          </div>
-          
-          <nav className="space-y-1">
-            {navigation.map((item) => {
-              const isActive = pathname === item.href;
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    isActive 
-                      ? "bg-[#1E5AA8] text-white shadow-sm" 
-                      : "text-zinc-300 hover:bg-[#103A73] hover:text-white"
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  {item.name}
-                </Link>
-              );
-            })}
-          </nav>
+    <div className="flex min-h-screen bg-zinc-50/50">
+      
+      {/* Menu Lateral (Sidebar) */}
+      <aside className="w-64 bg-white border-r border-zinc-200 hidden md:flex flex-col sticky top-0 h-screen shrink-0">
+        
+        {/* Logotipo / Cabeçalho do Menu */}
+        <div className="h-16 flex items-center px-6 border-b border-zinc-200">
+          <span className="text-xl font-bold text-[#0A244A] tracking-tight">Araras Moda</span>
         </div>
 
-        <div className="p-4 border-t border-[#103A73]">
-          <button
-            onClick={() => signOut({ callbackUrl: "/login" })}
-            className="flex w-full items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-zinc-300 hover:bg-[#103A73] hover:text-rose-400 transition-colors cursor-pointer"
-          >
-            <LogOut className="w-4 h-4" />
-            Sair do Sistema
-          </button>
+        {/* Links de Navegação */}
+        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1 custom-scrollbar">
+          {navigationItems.map((item) => {
+            // Verifica se a rota atual é exatamente o href ou se é uma sub-página
+            const isActive = pathname === item.href || (pathname.startsWith(`${item.href}/`) && item.href !== "/dashboard");
+            const Icon = item.icon;
+
+            return (
+              <Link
+                key={item.name}
+                href={item.href}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  isActive
+                    ? "bg-[#1E5AA8]/10 text-[#1E5AA8]" // Cor ativa
+                    : "text-[#4B4B4B] hover:bg-zinc-100 hover:text-[#0A244A]" // Cor inativa
+                }`}
+              >
+                <Icon className={`w-5 h-5 ${isActive ? "text-[#1E5AA8]" : "text-zinc-500"}`} />
+                {item.name}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* Rodapé do Menu (Perfil do Utilizador) */}
+        <div className="p-4 border-t border-zinc-200">
+          <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-zinc-50 border border-zinc-200 hover:bg-zinc-100 transition-colors cursor-pointer">
+            <div className="w-8 h-8 rounded-full bg-[#1E5AA8] flex items-center justify-center text-white font-bold text-xs shrink-0">
+              AM
+            </div>
+            <div className="flex flex-col overflow-hidden">
+              <span className="text-xs font-bold text-[#0A244A] truncate">Gestor</span>
+              <span className="text-[10px] text-zinc-500 truncate">Araras Moda</span>
+            </div>
+          </div>
         </div>
       </aside>
 
-      <div className="flex-1 flex flex-col">
-        <header className="h-16 bg-white border-b border-zinc-200 flex items-center justify-between px-8">
-          <div className="flex items-center gap-4">
-            <h2 className="text-sm font-semibold text-[#4B4B4B] uppercase tracking-wider">
-              Operação Ativa
-            </h2>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-[#1E5AA8] flex items-center justify-center font-medium text-sm text-white shadow-sm">
-              U
-            </div>
-          </div>
-        </header>
-
-        <main className="flex-1 p-8 overflow-y-auto">
+      {/* Área Principal onde as páginas (children) são renderizadas */}
+      <main className="flex-1 overflow-y-auto">
+        <div className="max-w-7xl mx-auto p-4 md:p-8">
           {children}
-        </main>
-      </div>
+        </div>
+      </main>
+      
     </div>
   );
 }
