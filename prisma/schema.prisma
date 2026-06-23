@@ -70,6 +70,7 @@ model Company {
   consignments Consignment[]
   revenues     Revenue[]
   expenses     Expense[]
+  calendarEvents CalendarEvent[]
 }
 
 model User {
@@ -308,4 +309,18 @@ model ExpenseApportionment {
   amount    Float
   expense   Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
   piece     Piece   @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+}
+
+model CalendarEvent {
+  id          String   @id @default(cuid())
+  companyId   String
+  title       String
+  description String?  @db.Text
+  location    String?
+  startDate   DateTime
+  isAllDay    Boolean  @default(false)
+  type        String   @default("TAREFA") // TAREFA, A_FAZER, EVENTO, BAZAR
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
 }
