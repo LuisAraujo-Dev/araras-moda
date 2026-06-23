@@ -20,20 +20,20 @@ export async function getCalendarPageDataAction(companyId: string) {
     ]);
 
     const dynamicTypes = Array.from(new Set(events.map(e => e.type)));
+    // Extrai fornecedores únicos baseados nos nomes de origem dos lotes cadastrados
+    const suppliers = Array.from(new Set(lots.map(l => l.sourceName))).map(name => ({ name }));
 
     return { 
       success: true, 
-      events: events.map(e => ({
-        ...e,
-        startDate: e.startDate // Mantém o objeto de data nativo
-      })), 
+      events, 
       stores: stores.map(s => ({ id: s.id, name: s.name, address: s.address })), 
       lots: lots.map(l => ({ id: l.id, code: l.code, sourceName: l.sourceName })),
+      suppliers,
       dynamicTypes 
     };
   } catch (error) {
     console.error(error);
-    return { success: false, events: [], stores: [], lots: [], dynamicTypes: [] };
+    return { success: false, events: [], stores: [], lots: [], suppliers: [], dynamicTypes: [] };
   }
 }
 
@@ -87,6 +87,29 @@ export async function updateCalendarEventAction(eventId: string, companyId: stri
   } catch (error) {
     console.error(error);
     return { error: "Falha ao atualizar o compromisso." };
+  }
+}
+
+export async function updateEventDateAction(eventId: string, companyId: string, newDate: Date) {
+  try {
+    const realId = await getRealCompanyId(companyId);
+    const currentEvent = await prisma.calendarEvent.findUnique({ where: { id: eventId, companyId: realId } });
+    if (!currentEvent) return { error: "Compromisso não encontrado." };
+
+    const targetDate = new Date(newDate);
+    const oldDate = new Date(currentEvent.startDate);
+    targetDate.setHours(oldDate.getHours(), oldDate.getMinutes(), 0, 0);
+
+    await prisma.calendarEvent.update({
+      where: { id: eventId, companyId: realId },
+      data: { startDate: targetDate },
+    });
+
+    revalidatePath("/dashboard/calendar");
+    return { success: true };
+  } catch (error) {
+    console.error(error);
+    return { error: "Falha ao mover o compromisso." };
   }
 }
 

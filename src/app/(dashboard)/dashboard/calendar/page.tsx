@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Calendar as CalendarIcon, PlusCircle, CheckCircle2, AlertCircle, Trash2, Pencil, ChevronLeft, ChevronRight, MapPin, Clock } from "lucide-react";
-import { getCalendarPageDataAction, createCalendarEventAction, updateCalendarEventAction, deleteCalendarEventAction } from "@/app/actions/calendar.actions";
+import { Calendar as CalendarIcon, PlusCircle, CheckCircle2, AlertCircle, Trash2, ChevronLeft, ChevronRight, MapPin, Clock } from "lucide-react";
+import { getCalendarPageDataAction, createCalendarEventAction, updateCalendarEventAction, deleteCalendarEventAction, updateEventDateAction } from "@/app/actions/calendar.actions";
 
 type DbEvent = {
   id: string;
@@ -20,18 +20,16 @@ type DbEvent = {
 
 type BasicStore = { id: string; name: string; address: string | null };
 type BasicLot = { id: string; code: string; sourceName: string };
+type BasicSupplier = { name: string };
 
-const DEFAULT_TYPES = ["Tarefa", "A Fazer", "Bazar", "Lavagem de Lote", "Ida ao Parceiro", "Manutenção das Peças", "Postar Peças"];
+const DEFAULT_TYPES = ["Bazar", "Lavagem de Lote", "Ida ao Parceiro", "Manutenção das Peças", "Postar Peças"];
 
-// Estilização dinâmica com base na categoria
-const TYPE_STYLES: Record<string, { label: string; bg: string }> = {
-  "Tarefa": { label: "Tarefa", bg: "bg-blue-50 text-blue-800 border-blue-200" },
-  "A Fazer": { label: "A Fazer", bg: "bg-zinc-100 text-zinc-800 border-zinc-200" },
-  "Bazar": { label: "Bazar", bg: "bg-amber-50 text-amber-900 border-amber-200" },
-  "Lavagem de Lote": { label: "Lavagem de Lote", bg: "bg-cyan-50 text-cyan-800 border-cyan-200" },
-  "Ida ao Parceiro": { label: "Ida ao Parceiro", bg: "bg-purple-50 text-purple-800 border-purple-200" },
-  "Manutenção das Peças": { label: "Manutenção das Peças", bg: "bg-rose-50 text-rose-800 border-rose-200" },
-  "Postar Peças": { label: "Postar Peças", bg: "bg-lime-50 text-lime-800 border-lime-200" },
+const TYPE_STYLES: Record<string, { bg: string }> = {
+  "Bazar": { bg: "bg-amber-50 text-amber-900 border-amber-200" },
+  "Lavagem de Lote": { bg: "bg-cyan-50 text-cyan-800 border-cyan-200" },
+  "Ida ao Parceiro": { bg: "bg-purple-50 text-purple-800 border-purple-200" },
+  "Manutenção das Peças": { bg: "bg-rose-50 text-rose-800 border-rose-200" },
+  "Postar Peças": { bg: "bg-lime-50 text-lime-800 border-lime-200" },
 };
 
 const WEEKDAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
@@ -43,6 +41,7 @@ export default function CalendarPage() {
   const [events, setEvents] = useState<DbEvent[]>([]);
   const [stores, setStores] = useState<BasicStore[]>([]);
   const [lots, setLots] = useState<BasicLot[]>([]);
+  const [suppliers, setSuppliers] = useState<BasicSupplier[]>([]);
   const [eventTypes, setEventTypes] = useState<string[]>(DEFAULT_TYPES);
 
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -56,10 +55,11 @@ export default function CalendarPage() {
   const [editingEvent, setEditingEvent] = useState<DbEvent | null>(null);
   const [eventToDelete, setEventToDelete] = useState<string | null>(null);
 
-  // Estados dos campos condicionais do formulário
-  const [selectedType, setSelectedType] = useState("Tarefa");
-  const [locationMode, setLocationMode] = useState("MANUAL"); // MANUAL ou PARTNER
+  const [selectedType, setSelectedType] = useState("Bazar");
+  const [partnerMode, setPartnerMode] = useState("NONE"); 
   const [selectedStoreId, setSelectedStoreId] = useState("");
+  const [selectedSupplierName, setSelectedSupplierName] = useState("");
+  const [manualLocation, setManualLocation] = useState("");
   const [selectedLotId, setSelectedLotId] = useState("");
   const [customInputInfo, setCustomInputInfo] = useState("");
 
@@ -69,6 +69,7 @@ export default function CalendarPage() {
       setEvents(result.events as DbEvent[]);
       setStores(result.stores);
       setLots(result.lots);
+      setSuppliers(result.suppliers);
       setEventTypes(Array.from(new Set([...DEFAULT_TYPES, ...result.dynamicTypes])));
     }
   };
@@ -81,6 +82,7 @@ export default function CalendarPage() {
         setEvents(result.events as DbEvent[]);
         setStores(result.stores);
         setLots(result.lots);
+        setSuppliers(result.suppliers);
         setEventTypes(Array.from(new Set([...DEFAULT_TYPES, ...result.dynamicTypes])));
         setPageLoading(false);
       }
@@ -104,33 +106,59 @@ export default function CalendarPage() {
     setOpen(val);
     if (!val) {
       setEditingEvent(null);
-      setSelectedType("Tarefa");
-      setLocationMode("MANUAL");
+      setSelectedType("Bazar");
+      setPartnerMode("NONE");
       setSelectedStoreId("");
+      setSelectedSupplierName("");
+      setManualLocation("");
       setSelectedLotId("");
       setCustomInputInfo("");
     }
   };
 
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    e.dataTransfer.setData("text/plain", id);
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetDate: Date) => {
+    e.preventDefault();
+    const eventId = e.dataTransfer.getData("text/plain");
+    if (!eventId) return;
+
+    setLoading(true);
+    const result = await updateEventDateAction(eventId, mockCompanyId, targetDate);
+    setLoading(false);
+
+    if (result.success) {
+      showBanner("Compromisso movido com sucesso!", "success");
+      await loadData();
+    } else {
+      showBanner(result.error || "Erro ao mover compromisso.", "error");
+    }
+  };
+
   const handleTypeChange = (val: string) => {
     if (val === "NEW") {
-      const newType = window.prompt("Digite o nome da nova categoria de compromisso:");
+      const newType = window.prompt("Digite o nome da nova categoria de atividade:");
       if (newType && newType.trim() !== "") {
         setEventTypes(prev => [...prev, newType.trim()]);
         setSelectedType(newType.trim());
       } else {
-        setSelectedType("Tarefa");
+        setSelectedType("Bazar");
       }
     } else {
       setSelectedType(val);
-      if (val === "Ida ao Parceiro") {
-        setLocationMode("PARTNER");
-      }
+      if (val === "Ida ao Parceiro") setPartnerMode("STORE");
     }
   };
 
-  const handlePrevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
-  const handleNextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+  const handlePrevMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+  };
+
+  const handleNextMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+  };
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -141,27 +169,41 @@ export default function CalendarPage() {
     const dateStr = formData.get("eventDate") as string;
     const combinedDate = new Date(`${dateStr}T${timeValue || "00:00"}:00`);
 
-    // Injeção de Inteligência de Localização
-    let finalLocation = formData.get("location") as string;
-    if (locationMode === "PARTNER" && selectedStoreId) {
+    let partnerName = "";
+    let locationString = "Não definido";
+
+    if (partnerMode === "STORE" && selectedStoreId) {
       const targetStore = stores.find(s => s.id === selectedStoreId);
-      finalLocation = targetStore ? `🏬 Loja: ${targetStore.name} ${targetStore.address ? `(- ${targetStore.address})` : ""}` : finalLocation;
+      if (targetStore) {
+        partnerName = targetStore.name;
+        locationString = `🏬 Loja: ${targetStore.name} ${targetStore.address ? `(${targetStore.address})` : ""}`;
+      }
+    } else if (partnerMode === "SUPPLIER" && selectedSupplierName) {
+      partnerName = selectedSupplierName;
+      locationString = `📦 Fornecedor: ${selectedSupplierName}`;
+    } else if (partnerMode === "MANUAL" && manualLocation) {
+      locationString = manualLocation;
     }
 
-    // Injeção de Inteligência de Contexto na Descrição
+    const autoTitle = partnerName 
+      ? `${selectedType} - ${partnerName}` 
+      : manualLocation 
+        ? `${selectedType} - ${manualLocation}` 
+        : selectedType;
+
     let finalDescription = formData.get("description") as string;
     if (selectedType === "Lavagem de Lote" && selectedLotId) {
       const targetLot = lots.find(l => l.id === selectedLotId);
-      if (targetLot) finalDescription = `[Lote Vinculado: ${targetLot.code} - ${targetLot.sourceName}] | ${finalDescription}`;
+      if (targetLot) finalDescription = `[Lote: ${targetLot.code} - ${targetLot.sourceName}] | ${finalDescription}`;
     }
     if ((selectedType === "Postar Peças" || selectedType === "Manutenção das Peças") && customInputInfo) {
-      finalDescription = `[Referência: ${customInputInfo}] | ${finalDescription}`;
+      finalDescription = `[Ref: ${customInputInfo}] | ${finalDescription}`;
     }
 
     const data = {
-      title: formData.get("title") as string,
+      title: autoTitle,
       description: finalDescription,
-      location: finalLocation || "Não definido",
+      location: locationString,
       startDate: combinedDate,
       isAllDay: !timeValue,
       type: selectedType,
@@ -245,8 +287,8 @@ export default function CalendarPage() {
           </DialogTrigger>
           <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle className="text-[#0A244A]">{editingEvent ? "Editar Compromisso" : "Agendar Compromisso"}</DialogTitle>
-              <DialogDescription className="text-[#4B4B4B]">Os campos adaptam-se conforme o tipo de atividade selecionada.</DialogDescription>
+              <DialogTitle className="text-[#0A244A]">{editingEvent ? "Editar Atividade" : "Agendar Atividade"}</DialogTitle>
+              <DialogDescription className="text-[#4B4B4B]">O título será composto automaticamente com base no tipo e parceiro.</DialogDescription>
             </DialogHeader>
 
             <form onSubmit={handleSubmit} className="space-y-4 pt-2">
@@ -256,13 +298,8 @@ export default function CalendarPage() {
                   {eventTypes.map(type => (
                     <option key={type} value={type}>{type}</option>
                   ))}
-                  <option value="NEW" className="font-bold text-[#1E5AA8]">+ Criar Nova Categoria</option>
+                  <option value="NEW" className="font-bold text-[#1E5AA8]">+ Criar Customizada</option>
                 </select>
-              </div>
-
-              <div className="space-y-1">
-                <Label htmlFor="title" className="text-[#0A244A]">Título</Label>
-                <Input id="title" name="title" defaultValue={editingEvent?.title || ""} placeholder="Ex: Montagem do Stand, Conferência de Peças..." required />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -276,9 +313,8 @@ export default function CalendarPage() {
                 </div>
               </div>
 
-              {/* CONDIÇÃO 1: Se for lavagem de lote, vincula as aquisições */}
               {selectedType === "Lavagem de Lote" && (
-                <div className="space-y-1 bg-cyan-50/50 p-3 border border-cyan-200 rounded-md animate-in slide-in-from-top-2">
+                <div className="space-y-1 bg-cyan-50/50 p-3 border border-cyan-200 rounded-md">
                   <Label className="text-cyan-900 font-semibold">Vincular Lote de Origem</Label>
                   <select value={selectedLotId} onChange={(e) => setSelectedLotId(e.target.value)} className="w-full h-10 px-3 rounded-md border border-cyan-200 bg-white text-sm" required>
                     <option value="">Selecione qual lote vai para lavagem...</option>
@@ -289,46 +325,57 @@ export default function CalendarPage() {
                 </div>
               )}
 
-              {/* CONDIÇÃO 2: Se for manutenção ou postagem, pede referências de rastreio/SKUs */}
               {(selectedType === "Postar Peças" || selectedType === "Manutenção das Peças") && (
-                <div className="space-y-1 bg-zinc-50 p-3 border border-zinc-200 rounded-md animate-in slide-in-from-top-2">
+                <div className="space-y-1 bg-zinc-50 p-3 border border-zinc-200 rounded-md">
                   <Label className="text-[#0A244A] font-semibold">
-                    {selectedType === "Postar Peças" ? "Código de Rastreio / Volumes" : "Códigos SKU das Peças"}
+                    {selectedType === "Postar Peças" ? "Código de Rastreio" : "SKUs das Peças"}
                   </Label>
-                  <Input value={customInputInfo} onChange={(e) => setCustomInputInfo(e.target.value)} placeholder={selectedType === "Postar Peças" ? "Ex: PM123456789BR" : "Ex: AM-234, AM-981..."} />
+                  <Input value={customInputInfo} onChange={(e) => setCustomInputInfo(e.target.value)} placeholder={selectedType === "Postar Peças" ? "Ex: BR123456789XL" : "Ex: AM-109, AM-443"} />
                 </div>
               )}
 
-              {/* CONDIÇÃO 3: Controle inteligente e flexível de Localização */}
               <div className="space-y-2 border-t border-zinc-100 pt-3">
-                <Label className="text-[#0A244A] font-semibold">Localização</Label>
-                <div className="flex gap-4 mb-2 text-xs">
-                  <label className="flex items-center gap-1.5 cursor-pointer">
-                    <input type="radio" checked={locationMode === "MANUAL"} onChange={() => setLocationMode("MANUAL")} className="text-[#1E5AA8]" /> Endereço Manual / Nenhum
+                <Label className="text-[#0A244A] font-semibold">Definir Parceiro / Local</Label>
+                <div className="flex flex-wrap gap-3 mb-2 text-xs">
+                  <label className="flex items-center gap-1 cursor-pointer">
+                    <input type="radio" checked={partnerMode === "NONE"} onChange={() => setPartnerMode("NONE")} /> Sem Parceiro
                   </label>
-                  <label className="flex items-center gap-1.5 cursor-pointer">
-                    <input type="radio" checked={locationMode === "PARTNER"} onChange={() => setLocationMode("PARTNER")} className="text-[#1E5AA8]" /> Vincular Loja Parceira
+                  <label className="flex items-center gap-1 cursor-pointer">
+                    <input type="radio" checked={partnerMode === "STORE"} onChange={() => setPartnerMode("STORE")} /> Loja (Consignação)
+                  </label>
+                  <label className="flex items-center gap-1 cursor-pointer">
+                    <input type="radio" checked={partnerMode === "SUPPLIER"} onChange={() => setPartnerMode("SUPPLIER")} /> Fornecedor (Compra)
+                  </label>
+                  <label className="flex items-center gap-1 cursor-pointer">
+                    <input type="radio" checked={partnerMode === "MANUAL"} onChange={() => setPartnerMode("MANUAL")} /> Local Manual
                   </label>
                 </div>
 
-                {locationMode === "MANUAL" ? (
-                  <Input id="location" name="location" defaultValue={editingEvent?.location || ""} placeholder="Ex: Galpão Central, Sala de Costura..." />
-                ) : (
-                  <select value={selectedStoreId} onChange={(e) => setSelectedStoreId(e.target.value)} className="w-full h-10 px-3 rounded-md border border-purple-200 bg-purple-50/50 text-sm animate-in slide-in-from-top-1" required={locationMode === "PARTNER"}>
-                    <option value="">Selecione o parceiro de destino...</option>
-                    {stores.map(s => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
+                {partnerMode === "STORE" && (
+                  <select value={selectedStoreId} onChange={(e) => setSelectedStoreId(e.target.value)} className="w-full h-10 px-3 rounded-md border border-purple-200 bg-white text-sm" required>
+                    <option value="">Selecione a loja consignatária...</option>
+                    {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
+                )}
+
+                {partnerMode === "SUPPLIER" && (
+                  <select value={selectedSupplierName} onChange={(e) => setSelectedSupplierName(e.target.value)} className="w-full h-10 px-3 rounded-md border border-amber-200 bg-white text-sm" required>
+                    <option value="">Selecione o fornecedor...</option>
+                    {suppliers.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
+                  </select>
+                )}
+
+                {partnerMode === "MANUAL" && (
+                  <Input value={manualLocation} onChange={(e) => setManualLocation(e.target.value)} placeholder="Ex: Escritório, Shopping, Feira..." required />
                 )}
               </div>
 
               <div className="space-y-1">
                 <Label htmlFor="description" className="text-[#0A244A]">Observações Adicionais</Label>
-                <Input id="description" name="description" defaultValue={editingEvent?.description?.split(" | ").pop() || ""} placeholder="Ex: Ligar antes para confirmar a entrega..." />
+                <Input id="description" name="description" defaultValue={editingEvent?.description?.split(" | ").pop() || ""} placeholder="Ex: Levar fita métrica e etiquetas..." />
               </div>
 
-              <Button type="submit" className="w-full bg-[#1E5AA8] hover:bg-[#103A73] text-white h-11 shadow-sm cursor-pointer" disabled={loading}>
+              <Button type="submit" className="w-full bg-[#1E5AA8] hover:bg-[#103A73] text-white h-11 cursor-pointer" disabled={loading}>
                 {loading ? "A processar..." : (editingEvent ? "Salvar Alterações" : "Confirmar Agendamento")}
               </Button>
             </form>
@@ -338,7 +385,7 @@ export default function CalendarPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
         
-        {/* Painel Esquerdo: A Grade Mensal */}
+        {/* Painel Esquerdo: Grade Mensal Interativa */}
         <div className="lg:col-span-3 bg-white border border-zinc-200 rounded-xl shadow-sm overflow-hidden p-5">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold text-[#0A244A]">
@@ -366,6 +413,8 @@ export default function CalendarPage() {
                 <div 
                   key={cell.toISOString()} 
                   onClick={() => setSelectedDate(cell)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => handleDrop(e, cell)}
                   className={`h-24 rounded-lg border p-1.5 flex flex-col justify-between cursor-pointer transition-all ${
                     isSelected ? 'border-[#1E5AA8] bg-blue-50/30 ring-1 ring-[#1E5AA8]' : 'border-zinc-200 hover:bg-zinc-50 bg-white'
                   }`}
@@ -378,7 +427,13 @@ export default function CalendarPage() {
                   
                   <div className="flex flex-col gap-0.5 overflow-hidden">
                     {dayEvents.slice(0, 2).map(e => (
-                      <div key={e.id} className={`text-[10px] px-1 py-0.5 rounded truncate font-medium ${TYPE_STYLES[e.type]?.bg || "bg-zinc-100 text-zinc-700"}`}>
+                      <div 
+                        key={e.id} 
+                        draggable
+                        onDragStart={(evt) => handleDragStart(idx === 0 ? evt : evt, e.id)}
+                        onClick={(evt) => { evt.stopPropagation(); handleEditClick(e); }}
+                        className={`text-[10px] px-1 py-0.5 rounded truncate font-medium cursor-grab active:cursor-grabbing border shadow-2xs transition-transform hover:scale-[1.02] ${TYPE_STYLES[e.type]?.bg || "bg-zinc-50 border-zinc-200 text-zinc-700"}`}
+                      >
                         {e.title}
                       </div>
                     ))}
@@ -392,7 +447,7 @@ export default function CalendarPage() {
           </div>
         </div>
 
-        {/* Painel Direito: Lista de Compromissos */}
+        {/* Painel Direito: Agenda Sidebar */}
         <div className="lg:col-span-1 bg-white border border-zinc-200 rounded-xl shadow-sm p-5 flex flex-col h-125">
           <div className="border-b border-zinc-100 pb-4 mb-4">
             <h3 className="font-bold text-[#0A244A] text-lg">Agenda do Dia</h3>
@@ -409,9 +464,13 @@ export default function CalendarPage() {
               </div>
             ) : (
               selectedDateEvents.map(e => (
-                <div key={e.id} className={`border rounded-lg p-3 relative group transition-shadow hover:shadow-sm ${TYPE_STYLES[e.type]?.bg || "bg-zinc-50 border-zinc-200 text-zinc-800"}`}>
-                  <div className="flex justify-between items-start gap-2 pr-12">
-                    <h4 className="font-bold text-sm text-[#0A244A] leading-tight wrap-break-words">{e.title}</h4>
+                <div 
+                  key={e.id} 
+                  onClick={() => handleEditClick(e)}
+                  className={`border rounded-lg p-3 relative group transition-all hover:shadow-sm cursor-pointer border-l-4 ${TYPE_STYLES[e.type]?.bg || "bg-zinc-50 border-zinc-200 text-zinc-800"}`}
+                >
+                  <div className="flex justify-between items-start gap-2 pr-6">
+                    <h4 className="font-bold text-sm text-[#0A244A] leading-tight wrap-break-word">{e.title}</h4>
                   </div>
                   
                   {e.description && <p className="text-xs text-zinc-600 mt-1 leading-relaxed">{e.description}</p>}
@@ -428,9 +487,8 @@ export default function CalendarPage() {
                     )}
                   </div>
 
-                  <div className="absolute top-2 right-2 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 p-0.5 rounded-md border border-zinc-100">
-                    <button onClick={() => handleEditClick(e)} className="p-1 text-zinc-500 hover:text-[#1E5AA8] rounded transition-colors cursor-pointer"><Pencil className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => setEventToDelete(e.id)} className="p-1 text-zinc-500 hover:text-rose-600 rounded transition-colors cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
+                  <div className="absolute top-2 right-2 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 p-0.5 rounded border border-zinc-100">
+                    <button onClick={(evt) => { evt.stopPropagation(); setEventToDelete(e.id); }} className="p-1 text-zinc-400 hover:text-rose-600 rounded transition-colors cursor-pointer" title="Remover Atividade"><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
                 </div>
               ))
