@@ -69,8 +69,6 @@ export default function StorefrontManagementPage() {
     setTimeout(() => setMessage(null), 3000);
   };
 
-  const storeUrl = config.slug ? `https://ararasmoda.com/${config.slug}` : "Configure sua loja para gerar o link";
-
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -80,6 +78,10 @@ export default function StorefrontManagementPage() {
       </div>
     );
   }
+
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : "https://araras-moda.vercel.app";
+  const displayHost = typeof window !== 'undefined' ? window.location.host : "araras-moda.vercel.app";
+  const storeUrl = config.slug ? `${baseUrl}/${config.slug}` : "Configure sua loja para gerar o link";
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -122,7 +124,7 @@ export default function StorefrontManagementPage() {
               </label>
               <div className="flex w-full">
                 <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-zinc-300 bg-zinc-50 text-zinc-500 sm:text-sm">
-                  ararasmoda.com/
+                  {displayHost}/
                 </span>
                 <input
                   type="text"
@@ -196,7 +198,7 @@ export default function StorefrontManagementPage() {
           <button
             type="submit"
             disabled={saving || !config.slug}
-            className="flex items-center gap-2 bg-[#1E5AA8] text-white px-5 py-2 rounded-md font-medium hover:bg-[#103A73] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 bg-[#1E5AA8] text-white px-5 py-2 rounded-md font-medium hover:bg-[#103A73] transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
           >
             {saving ? (
               <span className="animate-pulse">A Salvar...</span>

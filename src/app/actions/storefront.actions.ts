@@ -3,14 +3,27 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
-// Continuamos a usar o placeholder enquanto não implementamos a autenticação real
-const MOCK_COMPANY_ID = "company-placeholder-id";
+// Função para encontrar a empresa real no banco de dados
+async function getValidCompanyId() {
+  const company = await prisma.company.findFirst();
+  
+  if (company) {
+    return company.id;
+  }
+  
+  // Se não existir nenhuma empresa, cria uma base para podermos salvar os dados
+  const newCompany = await prisma.company.create({
+    data: { name: "Araras Moda" }
+  });
+  
+  return newCompany.id;
+}
 
-// 1. Buscar as configurações da Loja
 export async function getStorefrontConfigAction() {
   try {
+    const companyId = await getValidCompanyId();
     const config = await prisma.storefrontConfig.findUnique({
-      where: { companyId: MOCK_COMPANY_ID },
+      where: { companyId },
     });
     return { success: true, data: config };
   } catch (error) {
@@ -19,7 +32,6 @@ export async function getStorefrontConfigAction() {
   }
 }
 
-// 2. Salvar ou Atualizar as configurações
 export async function updateStorefrontConfigAction(data: {
   slug: string;
   description?: string;
@@ -27,9 +39,10 @@ export async function updateStorefrontConfigAction(data: {
   instagram?: string;
 }) {
   try {
-    // O comando upsert é mágico: ele atualiza se já existir, ou cria se for a primeira vez!
+    const companyId = await getValidCompanyId();
+
     const config = await prisma.storefrontConfig.upsert({
-      where: { companyId: MOCK_COMPANY_ID },
+      where: { companyId },
       update: {
         slug: data.slug,
         description: data.description,
@@ -37,7 +50,7 @@ export async function updateStorefrontConfigAction(data: {
         instagram: data.instagram,
       },
       create: {
-        companyId: MOCK_COMPANY_ID,
+        companyId,
         slug: data.slug,
         description: data.description,
         whatsapp: data.whatsapp,
@@ -45,7 +58,6 @@ export async function updateStorefrontConfigAction(data: {
       },
     });
 
-    // Atualiza o cache da página para mostrar os dados novos imediatamente
     revalidatePath("/dashboard/storefront");
     return { success: true, data: config };
   } catch (error) {
@@ -54,18 +66,18 @@ export async function updateStorefrontConfigAction(data: {
   }
 }
 
-// 3. Ligar/Desligar a peça na Vitrine
 export async function togglePieceVisibilityAction(pieceId: string, isPublished: boolean) {
   try {
+    const companyId = await getValidCompanyId();
+    
     await prisma.piece.update({
       where: { 
         id: pieceId,
-        companyId: MOCK_COMPANY_ID // Garante que só altera peças da própria empresa
+        companyId 
       },
       data: { isPublished },
     });
     
-    // Atualiza tanto o ecrã de estoque quanto o da loja
     revalidatePath("/dashboard/inventory");
     revalidatePath("/dashboard/storefront");
     return { success: true };
