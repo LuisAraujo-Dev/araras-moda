@@ -7,8 +7,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Package, PlusCircle, Zap, Tag, CheckCircle2, AlertCircle, Filter, Pencil, Trash2, Store, ArrowLeft } from "lucide-react";
+import { Package, PlusCircle, Zap, Tag, CheckCircle2, AlertCircle, Filter, Pencil, Trash2, Store, ArrowLeft, Globe, Eye, EyeOff } from "lucide-react";
 import { getPiecesAction, seedTaxonomyAction, createPieceAction, updatePieceAction, deletePieceAction, getTaxonomyAction, quickAddCategory, quickAddBrand, quickAddSize, quickAddColor, quickAddLot, quickAddStore } from "@/app/actions/piece.actions";
+import { togglePieceVisibilityAction } from "@/app/actions/storefront.actions";
 import { Category, Brand, Lot, Size, Color, Piece, Store as StoreModel } from "@prisma/client";
 
 type PieceWithRelations = Piece & {
@@ -20,6 +21,7 @@ type PieceWithRelations = Piece & {
   store: StoreModel | null;
   tags: string[]; 
   observations: string | null;
+  isPublished: boolean;
 };
 
 type TaxonomyData = {
@@ -92,6 +94,25 @@ export default function InventoryPage() {
     fetchInitialData();
     return () => { isMounted = false; };
   }, []);
+
+  const handleToggleVisibility = async (pieceId: string, currentStatus: boolean) => {
+    const newStatus = !currentStatus;
+    
+    setPieces(prevPieces => 
+      prevPieces.map(p => p.id === pieceId ? { ...p, isPublished: newStatus } : p)
+    );
+
+    const result = await togglePieceVisibilityAction(pieceId, newStatus);
+    
+    if (!result.success) {
+      setPieces(prevPieces => 
+        prevPieces.map(p => p.id === pieceId ? { ...p, isPublished: currentStatus } : p)
+      );
+      showBanner(result.error || "Erro ao atualizar a vitrine.", "error");
+    } else {
+      showBanner(newStatus ? "Peça publicada na vitrine!" : "Peça removida da vitrine.", "success");
+    }
+  };
 
   const showBanner = (m: string, t: "success" | "error") => {
     setBanner({ show: true, message: m, type: t }); 
@@ -450,7 +471,7 @@ export default function InventoryPage() {
               {pieces.length === 0 ? "Nenhuma peça na sua Arara" : "Nenhuma peça encontrada com estas etiquetas"}
             </h3>
             <p className="text-sm text-[#4B4B4B] max-w-sm mt-1">
-              {pieces.length === 0 ? "Clique em &apos;Carga Rápida&apos; para gerar os atributos base e começar." : "Tente remover alguns filtros para ver mais resultados."}
+              {pieces.length === 0 ? "Clique em 'Carga Rápida' para gerar os atributos base e começar." : "Tente remover alguns filtros para ver mais resultados."}
             </p>
           </div>
         ) : (
@@ -461,7 +482,8 @@ export default function InventoryPage() {
                 <TableHead>Produto</TableHead>
                 <TableHead>Etiquetas</TableHead>
                 <TableHead className="text-right">Custo</TableHead>
-                <TableHead className="text-right w-24">Ações</TableHead>
+                <TableHead className="text-center">Vitrine</TableHead>
+                <TableHead className="text-right w-28">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -502,8 +524,21 @@ export default function InventoryPage() {
                   <TableCell className="font-medium text-[#1E5AA8] text-right">
                     {formatCurrency(piece.purchasePrice)}
                   </TableCell>
+                  <TableCell className="text-center">
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border ${piece.isPublished ? "bg-emerald-50 border-emerald-200 text-emerald-700" : "bg-zinc-50 border-zinc-200 text-zinc-500"}`}>
+                      <Globe className={`w-3 h-3 ${piece.isPublished ? "text-emerald-500" : "text-zinc-400"}`} />
+                      {piece.isPublished ? "Online" : "Offline"}
+                    </span>
+                  </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
+                      <button 
+                        onClick={() => handleToggleVisibility(piece.id, piece.isPublished)} 
+                        className={`p-2 rounded-md transition-colors cursor-pointer ${piece.isPublished ? "text-emerald-600 hover:bg-emerald-50" : "text-zinc-400 hover:bg-zinc-100 hover:text-emerald-600"}`} 
+                        title={piece.isPublished ? "Remover da Vitrine" : "Publicar na Vitrine"}
+                      >
+                        {piece.isPublished ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
                       <button onClick={() => handleEditClick(piece)} className="p-2 text-zinc-400 hover:text-[#1E5AA8] hover:bg-blue-50 rounded-md transition-colors cursor-pointer" title="Editar Peça">
                         <Pencil className="w-4 h-4" />
                       </button>
