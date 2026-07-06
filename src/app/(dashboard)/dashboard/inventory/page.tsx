@@ -7,8 +7,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Package, PlusCircle, Zap, Tag, CheckCircle2, AlertCircle, Filter, Pencil, Trash2, Store, ArrowLeft, Globe, Eye, EyeOff } from "lucide-react";
-import { getPiecesAction, seedTaxonomyAction, createPieceAction, updatePieceAction, deletePieceAction, getTaxonomyAction, quickAddCategory, quickAddBrand, quickAddSize, quickAddColor, quickAddLot, quickAddStore } from "@/app/actions/piece.actions";
+import { Package, PlusCircle, Tag, CheckCircle2, AlertCircle, Filter, Pencil, Trash2, Store, ArrowLeft, Globe, Eye, EyeOff } from "lucide-react";
+import { getPiecesAction, createPieceAction, updatePieceAction, deletePieceAction, getTaxonomyAction, quickAddCategory, quickAddBrand, quickAddSize, quickAddColor, quickAddLot, quickAddStore } from "@/app/actions/piece.actions";
 import { togglePieceVisibilityAction } from "@/app/actions/storefront.actions";
 import { Category, Brand, Lot, Size, Color, Piece, Store as StoreModel } from "@prisma/client";
 
@@ -117,18 +117,6 @@ export default function InventoryPage() {
   const showBanner = (m: string, t: "success" | "error") => {
     setBanner({ show: true, message: m, type: t }); 
     setTimeout(() => setBanner({ show: false, message: "", type: "" }), 5000);
-  };
-
-  const handleSeed = async () => {
-    setLoading(true);
-    const result = await seedTaxonomyAction(mockCompanyId);
-    setLoading(false);
-    if (result.error) {
-      showBanner(result.error, "error");
-    } else {
-      showBanner("Carga rápida gerada com sucesso!", "success");
-      await loadData();
-    }
   };
 
   const triggerQuickAdd = (type: string, label: string) => {
@@ -269,14 +257,10 @@ export default function InventoryPage() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-2">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-[#0A244A]">Minha Arara</h1>
-          <p className="text-[#4B4B4B] mt-1">Gerencie peças e dispare lançamentos no financeiro ao marcar como &apos;Vendida&apos;.</p>
+          <p className="text-[#4B4B4B] mt-1">Gerencie peças e dispare lançamentos no financeiro ao marcar como Vendida.</p>
         </div>
 
         <div className="flex items-center gap-3">
-          <Button onClick={handleSeed} variant="outline" className="flex items-center gap-2 cursor-pointer border-[#F4C21A] text-[#0A244A] hover:bg-[#F4C21A] hover:text-[#0A244A] transition-colors font-medium shadow-sm" disabled={loading}>
-            <Zap className="w-4 h-4" /> Carga Rápida
-          </Button>
-
           <Dialog open={open} onOpenChange={handleCloseModal}>
             <DialogTrigger className="flex items-center justify-center gap-2 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white transition-colors shadow-sm h-10 px-4 rounded-md text-sm font-medium">
               <PlusCircle className="w-4 h-4" /> Cadastrar Peça
@@ -471,7 +455,7 @@ export default function InventoryPage() {
               {pieces.length === 0 ? "Nenhuma peça na sua Arara" : "Nenhuma peça encontrada com estas etiquetas"}
             </h3>
             <p className="text-sm text-[#4B4B4B] max-w-sm mt-1">
-              {pieces.length === 0 ? "Clique em 'Carga Rápida' para gerar os atributos base e começar." : "Tente remover alguns filtros para ver mais resultados."}
+              {pieces.length === 0 ? "Clique em 'Cadastrar Peça' para adicionar a sua primeira peça e começar." : "Tente remover alguns filtros para ver mais resultados."}
             </p>
           </div>
         ) : (
