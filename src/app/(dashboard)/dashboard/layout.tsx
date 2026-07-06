@@ -1,8 +1,8 @@
-//src/app/(dashboard)/dashboard/layout.tsx
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { 
   LayoutDashboard, 
   Package, 
@@ -13,8 +13,10 @@ import {
   BarChart3, 
   Settings,
   Calendar,
-  Boxes
+  Boxes,
+  Loader2
 } from "lucide-react";
+import { checkOnboardingStatusAction } from "@/app/actions/setup.actions";
 
 const navigationItems = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -31,6 +33,44 @@ const navigationItems = [
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [userName, setUserName] = useState("Gestor");
+  const [userInitials, setUserInitials] = useState("AM");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    checkOnboardingStatusAction().then((res) => {
+      if (!isMounted) return;
+
+      if (res.success) {
+        if (res.needsSetup && pathname !== "/dashboard/setup") {
+          router.replace("/dashboard/setup");
+        } else {
+          if (res.userName) {
+            const names = res.userName.split(" ");
+            setUserName(names[0]);
+            setUserInitials(names[0].charAt(0).toUpperCase());
+          }
+          setIsAuthorized(true);
+        }
+      } else {
+        setIsAuthorized(true);
+      }
+    });
+
+    return () => { isMounted = false; };
+  }, [pathname, router]);
+
+  if (!isAuthorized && pathname !== "/dashboard/setup") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-zinc-50">
+        <Loader2 className="w-8 h-8 animate-spin text-[#1E5AA8]" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen bg-zinc-50/50">
@@ -66,11 +106,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="p-4 border-t border-zinc-200">
           <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-zinc-50 border border-zinc-200 hover:bg-zinc-100 transition-colors cursor-pointer">
             <div className="w-8 h-8 rounded-full bg-[#1E5AA8] flex items-center justify-center text-white font-bold text-xs shrink-0">
-              AM
+              {userInitials}
             </div>
             <div className="flex flex-col overflow-hidden">
-              <span className="text-xs font-bold text-[#0A244A] truncate">Gestor</span>
-              <span className="text-[10px] text-zinc-500 truncate">Araras Moda</span>
+              <span className="text-xs font-bold text-[#0A244A] truncate">{userName}</span>
+              <span className="text-[10px] text-zinc-500 truncate">Sua Conta</span>
             </div>
           </div>
         </div>
