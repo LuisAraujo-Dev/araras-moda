@@ -1,22 +1,22 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { getServerSession } from "next-auth/next";
 import { revalidatePath } from "next/cache";
 
-// Função para encontrar a empresa real no banco de dados
+// Função segura que força o uso da empresa do dono da sessão!
 async function getValidCompanyId() {
-  const company = await prisma.company.findFirst();
+  const session = await getServerSession();
   
-  if (company) {
-    return company.id;
-  }
-  
-  // Se não existir nenhuma empresa, cria uma base para podermos salvar os dados
-  const newCompany = await prisma.company.create({
-    data: { name: "Araras Moda" }
+  if (!session?.user?.email) throw new Error("Não autorizado");
+
+  const user = await prisma.user.findUnique({
+    where: { email: session.user.email }
   });
+
+  if (!user) throw new Error("Utilizador não encontrado");
   
-  return newCompany.id;
+  return user.companyId;
 }
 
 export async function getStorefrontConfigAction() {

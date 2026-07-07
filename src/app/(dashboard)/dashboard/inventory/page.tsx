@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Package, PlusCircle, Tag, CheckCircle2, AlertCircle, Filter, Pencil, Trash2, Store, ArrowLeft, Globe, Eye, EyeOff } from "lucide-react";
 import { getPiecesAction, createPieceAction, updatePieceAction, deletePieceAction, getTaxonomyAction, quickAddCategory, quickAddBrand, quickAddSize, quickAddColor, quickAddLot, quickAddStore } from "@/app/actions/piece.actions";
 import { togglePieceVisibilityAction } from "@/app/actions/storefront.actions";
+import { checkOnboardingStatusAction } from "@/app/actions/setup.actions";
 import { Category, Brand, Lot, Size, Color, Piece, Store as StoreModel } from "@prisma/client";
 
 type PieceWithRelations = Piece & {
@@ -48,8 +49,7 @@ const TAG_COLORS: Record<string, string> = {
 const AVAILABLE_TAGS = Object.keys(TAG_COLORS);
 
 export default function InventoryPage() {
-  const mockCompanyId = "company-placeholder-id";
-
+  const [companyId, setCompanyId] = useState<string>("");
   const [pieces, setPieces] = useState<PieceWithRelations[]>([]);
   const [taxonomy, setTaxonomy] = useState<TaxonomyData>({ categories: [], brands: [], lots: [], sizes: [], colors: [], stores: [] });
   const [open, setOpen] = useState(false);
@@ -76,8 +76,8 @@ export default function InventoryPage() {
   const isNowSold = selectedTags.includes("Vendida");
   const showSalePriceInput = !isAlreadySold && isNowSold;
 
-  const loadData = async () => {
-    const [p, t] = await Promise.all([getPiecesAction(mockCompanyId), getTaxonomyAction(mockCompanyId)]);
+  const loadData = async (cid: string) => {
+    const [p, t] = await Promise.all([getPiecesAction(cid), getTaxonomyAction(cid)]);
     setPieces(p as PieceWithRelations[]); 
     setTaxonomy(t as TaxonomyData);
   };
@@ -85,10 +85,18 @@ export default function InventoryPage() {
   useEffect(() => {
     let isMounted = true;
     const fetchInitialData = async () => {
-      const [p, t] = await Promise.all([getPiecesAction(mockCompanyId), getTaxonomyAction(mockCompanyId)]);
-      if (isMounted) {
-        setPieces(p as PieceWithRelations[]);
-        setTaxonomy(t as TaxonomyData);
+      const status = await checkOnboardingStatusAction();
+      
+      if (status.success && status.companyId) {
+        if (isMounted) setCompanyId(status.companyId);
+        const [p, t] = await Promise.all([
+          getPiecesAction(status.companyId), 
+          getTaxonomyAction(status.companyId)
+        ]);
+        if (isMounted) {
+          setPieces(p as PieceWithRelations[]);
+          setTaxonomy(t as TaxonomyData);
+        }
       }
     };
     fetchInitialData();
@@ -125,19 +133,19 @@ export default function InventoryPage() {
   };
 
   const handleSaveQuickAdd = async () => {
-    if (!quickAddValue || quickAddValue.trim() === "") return;
+    if (!quickAddValue || quickAddValue.trim() === "" || !companyId) return;
     
     setLoading(true);
     let newRecord;
     
-    if (quickAdd.type === 'category') newRecord = await quickAddCategory(mockCompanyId, quickAddValue);
-    if (quickAdd.type === 'brand') newRecord = await quickAddBrand(mockCompanyId, quickAddValue);
-    if (quickAdd.type === 'size') newRecord = await quickAddSize(mockCompanyId, quickAddValue);
-    if (quickAdd.type === 'color') newRecord = await quickAddColor(mockCompanyId, quickAddValue);
-    if (quickAdd.type === 'lot') newRecord = await quickAddLot(mockCompanyId, quickAddValue);
-    if (quickAdd.type === 'store') newRecord = await quickAddStore(mockCompanyId, quickAddValue);
+    if (quickAdd.type === 'category') newRecord = await quickAddCategory(companyId, quickAddValue);
+    if (quickAdd.type === 'brand') newRecord = await quickAddBrand(companyId, quickAddValue);
+    if (quickAdd.type === 'size') newRecord = await quickAddSize(companyId, quickAddValue);
+    if (quickAdd.type === 'color') newRecord = await quickAddColor(companyId, quickAddValue);
+    if (quickAdd.type === 'lot') newRecord = await quickAddLot(companyId, quickAddValue);
+    if (quickAdd.type === 'store') newRecord = await quickAddStore(companyId, quickAddValue);
     
-    await loadData(); 
+    await loadData(companyId); 
     
     if (quickAdd.type === 'category' && newRecord) setCatId(newRecord.id);
     if (quickAdd.type === 'brand' && newRecord) setBrandId(newRecord.id);
@@ -188,6 +196,8 @@ export default function InventoryPage() {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); 
+    if (!companyId) return;
+
     setLoading(true);
     const formData = new FormData(event.currentTarget);
     
@@ -213,28 +223,28 @@ export default function InventoryPage() {
     };
 
     const result = editingPiece 
-      ? await updatePieceAction(editingPiece.id, mockCompanyId, data) 
-      : await createPieceAction(mockCompanyId, data);
+      ? await updatePieceAction(editingPiece.id, companyId, data) 
+      : await createPieceAction(companyId, data);
       
     setLoading(false);
 
     if (result.success) {
       handleCloseModal(false);
       showBanner(editingPiece ? "Peça atualizada!" : "Peça guardada!", "success");
-      await loadData();
+      await loadData(companyId);
     } else {
       showBanner(result.error || "Erro", "error");
     }
   }
 
   async function confirmDelete() {
-    if (!pieceToDelete) return;
+    if (!pieceToDelete || !companyId) return;
     setLoading(true); 
-    await deletePieceAction(pieceToDelete, mockCompanyId); 
+    await deletePieceAction(pieceToDelete, companyId); 
     setLoading(false);
     showBanner("Excluída com sucesso!", "success"); 
     setPieceToDelete(null); 
-    await loadData();
+    await loadData(companyId);
   }
 
   const formatCurrency = (val: number) =>
@@ -244,6 +254,17 @@ export default function InventoryPage() {
     if (filterTags.length === 0) return true;
     return filterTags.some(tag => piece.tags.includes(tag));
   });
+
+  if (!companyId) {
+    return (
+      <div className="flex h-[60vh] items-center justify-center">
+        <div className="flex flex-col items-center text-zinc-500">
+          <Package className="w-8 h-8 animate-pulse mb-2 text-[#1E5AA8]" />
+          <p>A carregar o seu estoque privado...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 relative">
