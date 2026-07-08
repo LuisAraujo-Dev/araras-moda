@@ -377,7 +377,7 @@ export default function InventoryPage() {
   }
 
   return (
-    <div className="space-y-8 relative">
+    <div className="space-y-6 relative pb-6">
       {banner.show && (
         <div className={`fixed top-6 right-6 z-100 flex items-center gap-3 px-5 py-4 rounded-lg shadow-xl transition-all min-w-80 ${banner.type === "success" ? "bg-emerald-50 text-emerald-900 border border-emerald-200" : "bg-rose-50 text-rose-900 border border-rose-200"}`}>
           {banner.type === "success" ? <CheckCircle2 className="w-5 h-5 text-emerald-600" /> : <AlertCircle className="w-5 h-5 text-rose-600" />}
@@ -388,18 +388,18 @@ export default function InventoryPage() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-2">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-[#0A244A]">Minha Arara</h1>
-          <p className="text-[#4B4B4B] mt-1">Gerencie peças e dispare lançamentos no financeiro ao marcar como Vendida.</p>
+          <p className="text-[#4B4B4B] mt-1 text-sm md:text-base">Gerencie peças e controle o seu estoque.</p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 w-full sm:w-auto">
           <Dialog open={open} onOpenChange={handleCloseModal}>
-            <DialogTrigger className="flex items-center justify-center gap-2 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white transition-colors shadow-sm h-10 px-4 rounded-md text-sm font-medium">
+            <DialogTrigger className="flex flex-1 sm:flex-none items-center justify-center gap-2 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white transition-colors shadow-sm h-10 px-4 rounded-md text-sm font-medium">
               <PlusCircle className="w-4 h-4" /> Cadastrar Peça
             </DialogTrigger>
-            <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 rounded-xl">
               
               {quickAdd.isOpen ? (
-                <div className="space-y-6 py-4">
+                <div className="space-y-6 py-2">
                   <div className="flex items-center gap-2 mb-4">
                     <button onClick={() => setQuickAdd({ isOpen: false, type: "", label: "" })} className="p-2 hover:bg-zinc-100 rounded-full transition-colors cursor-pointer">
                       <ArrowLeft className="w-5 h-5 text-zinc-600" />
@@ -425,12 +425,12 @@ export default function InventoryPage() {
                 <>
                   <DialogHeader>
                     <DialogTitle className="text-[#0A244A]">{editingPiece ? "Editar Peça" : "Cadastrar Peça"}</DialogTitle>
-                    <DialogDescription className="text-[#4B4B4B]">
+                    <DialogDescription className="text-[#4B4B4B] text-xs sm:text-sm">
                       O nome e o código SKU são gerados automaticamente.
                     </DialogDescription>
                   </DialogHeader>
-                  <form onSubmit={handleSubmit} className="space-y-6 pt-2">
-                    <div className="grid grid-cols-2 gap-4">
+                  <form onSubmit={handleSubmit} className="space-y-5 pt-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-1">
                         <Label className="text-[#0A244A]">Categoria</Label>
                         <SearchableSelect
@@ -455,7 +455,7 @@ export default function InventoryPage() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-1">
                         <Label className="text-[#0A244A]">Tamanho</Label>
                         <SearchableSelect
@@ -480,7 +480,7 @@ export default function InventoryPage() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-1">
                         <Label className="text-[#0A244A]">Origem / Lote</Label>
                         <SearchableSelect
@@ -494,7 +494,7 @@ export default function InventoryPage() {
                       </div>
                       <div className="space-y-1">
                         <Label htmlFor="purchasePrice" className="text-[#0A244A]">Custo / Compra (R$)</Label>
-                        <Input id="purchasePrice" name="purchasePrice" type="number" step="0.01" min="0" defaultValue={editingPiece?.purchasePrice || ""} required />
+                        <Input id="purchasePrice" name="purchasePrice" type="number" step="0.01" min="0" defaultValue={editingPiece?.purchasePrice || ""} required className="h-10" />
                       </div>
                     </div>
 
@@ -526,7 +526,7 @@ export default function InventoryPage() {
                         <div className="pt-4 border-t border-zinc-200 mt-4 animate-in slide-in-from-top-2">
                           <div className="bg-lime-50 border border-lime-200 p-4 rounded-md">
                             <Label htmlFor="salePrice" className="text-lime-900 font-bold mb-2 block">Valor Efetivo da Venda (R$)</Label>
-                            <Input id="salePrice" name="salePrice" type="number" step="0.01" min="0" required={showSalePriceInput} placeholder="Será lançado automaticamente nas Receitas..." className="bg-white border-lime-300 focus-visible:ring-lime-500" />
+                            <Input id="salePrice" name="salePrice" type="number" step="0.01" min="0" required={showSalePriceInput} placeholder="Lançamento automático..." className="bg-white border-lime-300 focus-visible:ring-lime-500 h-10" />
                           </div>
                         </div>
                       )}
@@ -534,10 +534,10 @@ export default function InventoryPage() {
 
                     <div className="space-y-1">
                       <Label htmlFor="observations" className="text-[#0A244A]">Observações</Label>
-                      <Input id="observations" name="observations" defaultValue={editingPiece?.observations || ""} placeholder="Ex: Fio puxado na manga direita..." />
+                      <Input id="observations" name="observations" defaultValue={editingPiece?.observations || ""} placeholder="Ex: Fio puxado na manga direita..." className="h-10" />
                     </div>
 
-                    <Button type="submit" className="w-full mt-4 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white h-11 text-base shadow-sm" disabled={loading}>
+                    <Button type="submit" className="w-full mt-2 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white h-12 text-base shadow-sm font-medium" disabled={loading}>
                       {loading ? "A processar..." : "Salvar Alterações"}
                     </Button>
                   </form>
@@ -547,18 +547,18 @@ export default function InventoryPage() {
           </Dialog>
 
           <Dialog open={!!pieceToDelete} onOpenChange={(val) => !val && setPieceToDelete(null)}>
-            <DialogContent className="sm:max-w-md">
+            <DialogContent className="w-[90vw] sm:max-w-md rounded-xl">
               <DialogHeader>
                 <DialogTitle className="text-rose-600 flex items-center gap-2">
                   <AlertCircle className="w-5 h-5" /> Confirmar Exclusão
                 </DialogTitle>
-                <DialogDescription className="text-zinc-600 mt-3 text-base">
+                <DialogDescription className="text-zinc-600 mt-3 text-sm md:text-base">
                   Tem certeza que deseja excluir esta peça da sua Arara? Esta ação não poderá ser desfeita.
                 </DialogDescription>
               </DialogHeader>
               <div className="flex gap-3 mt-4">
-                <Button variant="outline" className="flex-1 cursor-pointer" onClick={() => setPieceToDelete(null)} disabled={loading}>Cancelar</Button>
-                <Button className="flex-1 bg-rose-600 hover:bg-rose-700 text-white cursor-pointer" onClick={confirmDelete} disabled={loading}>
+                <Button variant="outline" className="flex-1 cursor-pointer h-11" onClick={() => setPieceToDelete(null)} disabled={loading}>Cancelar</Button>
+                <Button className="flex-1 bg-rose-600 hover:bg-rose-700 text-white cursor-pointer h-11" onClick={confirmDelete} disabled={loading}>
                   {loading ? "A processar..." : "Sim, Excluir"}
                 </Button>
               </div>
@@ -569,9 +569,9 @@ export default function InventoryPage() {
 
       <div className="bg-white rounded-xl border border-zinc-200 shadow-sm overflow-hidden mt-6">
         {pieces.length > 0 && (
-          <div className="p-4 border-b border-zinc-200 bg-zinc-50/50 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+          <div className="p-4 border-b border-zinc-200 bg-zinc-50/50 flex flex-col items-start gap-3">
             <span className="text-sm font-semibold text-zinc-500 flex items-center gap-2">
-              <Filter className="w-4 h-4" /> Filtrar por:
+              <Filter className="w-4 h-4" /> Filtrar por etiquetas:
             </span>
             <div className="flex flex-wrap gap-2">
               {AVAILABLE_TAGS.map(tag => (
@@ -598,92 +598,162 @@ export default function InventoryPage() {
         )}
 
         {filteredPieces.length === 0 ? (
-          <div className="p-16 text-center flex flex-col items-center justify-center">
+          <div className="p-12 md:p-16 text-center flex flex-col items-center justify-center">
             <Package className="w-12 h-12 text-[#1E5AA8]/30 mb-4" />
             <h3 className="text-lg font-semibold text-[#0A244A]">
-              {pieces.length === 0 ? "Nenhuma peça na sua Arara" : "Nenhuma peça encontrada com estas etiquetas"}
+              {pieces.length === 0 ? "Nenhuma peça na sua Arara" : "Nenhuma peça encontrada"}
             </h3>
             <p className="text-sm text-[#4B4B4B] max-w-sm mt-1">
-              {pieces.length === 0 ? "Clique em 'Cadastrar Peça' para adicionar a sua primeira peça e começar." : "Tente remover alguns filtros para ver mais resultados."}
+              {pieces.length === 0 ? "Clique em 'Cadastrar Peça' para adicionar o seu primeiro item." : "Tente remover alguns filtros para ver mais resultados."}
             </p>
           </div>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-32">SKU</TableHead>
-                <TableHead>Produto</TableHead>
-                <TableHead>Etiquetas</TableHead>
-                <TableHead className="text-right">Custo</TableHead>
-                <TableHead className="text-center">Vitrine</TableHead>
-                <TableHead className="text-right w-28">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+          <>
+            <div className="md:hidden flex flex-col divide-y divide-zinc-100">
               {filteredPieces.map((piece) => (
-                <TableRow key={piece.id}>
-                  <TableCell className="font-medium text-[#4B4B4B] text-xs">{piece.code}</TableCell>
-                  <TableCell>
-                    <div className="flex flex-col">
-                      <span className="font-medium text-[#0A244A]">{piece.name}</span>
-                      <span className="text-xs text-zinc-500 truncate w-64">
-                        Origem: {piece.lot?.sourceName}
-                      </span>
-                      {piece.observations && (
-                        <span className="text-xs text-amber-600 mt-1 flex items-center gap-1">
-                          <AlertCircle className="w-3 h-3" /> {piece.observations}
+                <div key={piece.id} className="p-4 flex flex-col gap-3 hover:bg-zinc-50 transition-colors">
+                  <div className="flex justify-between items-start gap-2">
+                    <div>
+                      <h3 className="font-semibold text-[#0A244A] text-sm leading-tight">{piece.name}</h3>
+                      <span className="text-xs text-zinc-500 font-medium mt-0.5 inline-block">SKU: {piece.code}</span>
+                    </div>
+                    <div className="font-bold text-[#1E5AA8] text-sm shrink-0">
+                      {formatCurrency(piece.purchasePrice)}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                     <span className="text-xs text-zinc-600">
+                        <span className="font-medium">Origem:</span> {piece.lot?.sourceName}
+                     </span>
+                     {piece.store && piece.tags.includes("Em consignação") && (
+                        <span className="text-xs text-purple-700 flex items-center gap-1.5 font-medium bg-purple-50 px-2 py-1 rounded w-fit">
+                          <Store className="w-3.5 h-3.5" /> {piece.store.name}
                         </span>
-                      )}
-                      {piece.store && piece.tags.includes("Em consignação") && (
-                        <span className="text-xs text-purple-700 mt-0.5 flex items-center gap-1 font-medium">
-                          <Store className="w-3 h-3" /> Em {piece.store.name}
+                     )}
+                     {piece.observations && (
+                        <span className="text-xs text-amber-700 flex items-center gap-1.5 font-medium bg-amber-50 px-2 py-1 rounded w-fit">
+                          <AlertCircle className="w-3.5 h-3.5" /> {piece.observations}
                         </span>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1.5 max-w-xs">
-                      {piece.tags && piece.tags.length > 0 ? (
-                        piece.tags.map(tag => (
-                          <Badge key={tag} className={`font-normal px-2 py-0.5 text-[10px] ${TAG_COLORS[tag] || "bg-zinc-100 text-zinc-800"}`}>
-                            {tag}
-                          </Badge>
-                        ))
-                      ) : (
-                        <span className="text-xs text-zinc-400 italic">Sem etiquetas</span>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="font-medium text-[#1E5AA8] text-right">
-                    {formatCurrency(piece.purchasePrice)}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border ${piece.isPublished ? "bg-emerald-50 border-emerald-200 text-emerald-700" : "bg-zinc-50 border-zinc-200 text-zinc-500"}`}>
-                      <Globe className={`w-3 h-3 ${piece.isPublished ? "text-emerald-500" : "text-zinc-400"}`} />
-                      {piece.isPublished ? "Online" : "Offline"}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <button 
-                        onClick={() => handleToggleVisibility(piece.id, piece.isPublished)} 
-                        className={`p-2 rounded-md transition-colors cursor-pointer ${piece.isPublished ? "text-emerald-600 hover:bg-emerald-50" : "text-zinc-400 hover:bg-zinc-100 hover:text-emerald-600"}`} 
-                        title={piece.isPublished ? "Remover da Vitrine" : "Publicar na Vitrine"}
-                      >
-                        {piece.isPublished ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                      <button onClick={() => handleEditClick(piece)} className="p-2 text-zinc-400 hover:text-[#1E5AA8] hover:bg-blue-50 rounded-md transition-colors cursor-pointer" title="Editar Peça">
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => setPieceToDelete(piece.id)} className="p-2 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer" title="Excluir Peça">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </TableCell>
-                </TableRow>
+                     )}
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {piece.tags && piece.tags.length > 0 ? (
+                      piece.tags.map(tag => (
+                        <Badge key={tag} className={`font-normal px-2 py-0.5 text-[10px] ${TAG_COLORS[tag] || "bg-zinc-100 text-zinc-800"}`}>
+                          {tag}
+                        </Badge>
+                      ))
+                    ) : (
+                      <span className="text-[10px] text-zinc-400 italic">Sem etiquetas</span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-3 border-t border-zinc-100 mt-2">
+                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-semibold border ${piece.isPublished ? "bg-emerald-50 border-emerald-200 text-emerald-700" : "bg-zinc-50 border-zinc-200 text-zinc-500"}`}>
+                        <Globe className={`w-3.5 h-3.5 ${piece.isPublished ? "text-emerald-500" : "text-zinc-400"}`} />
+                        {piece.isPublished ? "Na Vitrine" : "Offline"}
+                     </span>
+
+                     <div className="flex gap-1.5">
+                        <button
+                          onClick={() => handleToggleVisibility(piece.id, piece.isPublished)}
+                          className={`p-2 rounded-md transition-colors cursor-pointer border ${piece.isPublished ? "border-emerald-200 text-emerald-600 bg-emerald-50" : "border-zinc-200 text-zinc-500 bg-zinc-50"}`}
+                        >
+                          {piece.isPublished ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                        <button onClick={() => handleEditClick(piece)} className="p-2 text-blue-600 bg-blue-50 border border-blue-100 rounded-md transition-colors cursor-pointer">
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => setPieceToDelete(piece.id)} className="p-2 text-rose-600 bg-rose-50 border border-rose-100 rounded-md transition-colors cursor-pointer">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                     </div>
+                  </div>
+                </div>
               ))}
-            </TableBody>
-          </Table>
+            </div>
+
+            <div className="hidden md:block overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="w-32 font-semibold">SKU</TableHead>
+                    <TableHead className="font-semibold">Produto</TableHead>
+                    <TableHead className="font-semibold">Etiquetas</TableHead>
+                    <TableHead className="text-right font-semibold">Custo</TableHead>
+                    <TableHead className="text-center font-semibold">Vitrine</TableHead>
+                    <TableHead className="text-right w-36 font-semibold">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredPieces.map((piece) => (
+                    <TableRow key={piece.id} className="hover:bg-zinc-50/80 transition-colors">
+                      <TableCell className="font-medium text-[#4B4B4B] text-xs">{piece.code}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-1">
+                          <span className="font-semibold text-[#0A244A]">{piece.name}</span>
+                          <span className="text-xs text-zinc-500 truncate max-w-62.5">
+                            Origem: {piece.lot?.sourceName}
+                          </span>
+                          {piece.observations && (
+                            <span className="text-xs text-amber-600 flex items-center gap-1 font-medium bg-amber-50 px-1.5 py-0.5 rounded w-fit">
+                              <AlertCircle className="w-3 h-3 shrink-0" /> {piece.observations}
+                            </span>
+                          )}
+                          {piece.store && piece.tags.includes("Em consignação") && (
+                            <span className="text-xs text-purple-700 flex items-center gap-1 font-medium bg-purple-50 px-1.5 py-0.5 rounded w-fit">
+                              <Store className="w-3 h-3 shrink-0" /> Em {piece.store.name}
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1.5 max-w-50">
+                          {piece.tags && piece.tags.length > 0 ? (
+                            piece.tags.map(tag => (
+                              <Badge key={tag} className={`font-normal px-2 py-0.5 text-[10px] border-transparent ${TAG_COLORS[tag] || "bg-zinc-100 text-zinc-800"}`}>
+                                {tag}
+                              </Badge>
+                            ))
+                          ) : (
+                            <span className="text-xs text-zinc-400 italic">Sem etiquetas</span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-bold text-[#1E5AA8] text-right">
+                        {formatCurrency(piece.purchasePrice)}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold border shadow-sm ${piece.isPublished ? "bg-emerald-50 border-emerald-200 text-emerald-700" : "bg-white border-zinc-200 text-zinc-500"}`}>
+                          <Globe className={`w-3.5 h-3.5 ${piece.isPublished ? "text-emerald-500" : "text-zinc-400"}`} />
+                          {piece.isPublished ? "Online" : "Offline"}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1.5">
+                          <button 
+                            onClick={() => handleToggleVisibility(piece.id, piece.isPublished)} 
+                            className={`p-2 rounded-md transition-all cursor-pointer border ${piece.isPublished ? "border-emerald-200 text-emerald-600 bg-emerald-50 hover:bg-emerald-100" : "border-transparent text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"}`} 
+                            title={piece.isPublished ? "Remover da Vitrine" : "Publicar na Vitrine"}
+                          >
+                            {piece.isPublished ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                          <button onClick={() => handleEditClick(piece)} className="p-2 text-zinc-400 hover:text-[#1E5AA8] hover:bg-blue-50 rounded-md transition-all cursor-pointer" title="Editar Peça">
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => setPieceToDelete(piece.id)} className="p-2 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-all cursor-pointer" title="Excluir Peça">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
         )}
       </div>
     </div>
