@@ -1,17 +1,18 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Package, PlusCircle, Tag, CheckCircle2, AlertCircle, Filter, Pencil, Trash2, Store, ArrowLeft, Globe, Eye, EyeOff, ChevronDown, Search, Check } from "lucide-react";
+import { Package, PlusCircle, Tag, CheckCircle2, AlertCircle, Filter, Pencil, Trash2, Store, ArrowLeft, Globe, Eye, EyeOff, ChevronDown, Search, Check, ImageIcon } from "lucide-react";
 import { getPiecesAction, createPieceAction, updatePieceAction, deletePieceAction, getTaxonomyAction, quickAddCategory, quickAddBrand, quickAddSize, quickAddColor, quickAddLot, quickAddStore } from "@/app/actions/piece.actions";
 import { togglePieceVisibilityAction } from "@/app/actions/storefront.actions";
 import { checkOnboardingStatusAction } from "@/app/actions/setup.actions";
-import { Category, Brand, Lot, Size, Color, Piece, Store as StoreModel } from "@prisma/client";
+import { Category, Brand, Lot, Size, Color, Piece, Store as StoreModel, PieceImage } from "@prisma/client";
 
 type PieceWithRelations = Piece & {
   category: Category; 
@@ -20,6 +21,7 @@ type PieceWithRelations = Piece & {
   size: Size | null; 
   color: Color | null; 
   store: StoreModel | null;
+  images: PieceImage[];
   tags: string[]; 
   observations: string | null;
   isPublished: boolean;
@@ -612,28 +614,44 @@ export default function InventoryPage() {
             <div className="md:hidden flex flex-col divide-y divide-zinc-100">
               {filteredPieces.map((piece) => (
                 <div key={piece.id} className="p-4 flex flex-col gap-3 hover:bg-zinc-50 transition-colors">
-                  <div className="flex justify-between items-start gap-2">
-                    <div>
-                      <h3 className="font-semibold text-[#0A244A] text-sm leading-tight">{piece.name}</h3>
-                      <span className="text-xs text-zinc-500 font-medium mt-0.5 inline-block">SKU: {piece.code}</span>
+                  <div className="flex justify-between items-start gap-3">
+                    <div className="flex gap-3 items-start flex-1">
+                      {/* Miniatura da Imagem - Mobile */}
+                      <div className="w-16 h-16 rounded-md bg-zinc-100 border border-zinc-200 shrink-0 overflow-hidden relative flex items-center justify-center">
+                        {piece.images && piece.images.length > 0 ? (
+                          <Image 
+                            src={piece.images[0].imageUrl} 
+                            alt={piece.name}
+                            fill
+                            className="object-cover"
+                            sizes="64px"
+                          />
+                        ) : (
+                          <ImageIcon className="w-6 h-6 text-zinc-300" />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-[#0A244A] text-sm leading-tight line-clamp-2">{piece.name}</h3>
+                        <span className="text-[11px] text-zinc-500 font-medium mt-0.5 inline-block bg-zinc-100 px-1.5 rounded">SKU: {piece.code}</span>
+                      </div>
                     </div>
                     <div className="font-bold text-[#1E5AA8] text-sm shrink-0">
                       {formatCurrency(piece.purchasePrice)}
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-1.5">
+                  <div className="flex flex-col gap-1.5 mt-1">
                      <span className="text-xs text-zinc-600">
                         <span className="font-medium">Origem:</span> {piece.lot?.sourceName}
                      </span>
                      {piece.store && piece.tags.includes("Em consignação") && (
                         <span className="text-xs text-purple-700 flex items-center gap-1.5 font-medium bg-purple-50 px-2 py-1 rounded w-fit">
-                          <Store className="w-3.5 h-3.5" /> {piece.store.name}
+                          <Store className="w-3.5 h-3.5 shrink-0" /> {piece.store.name}
                         </span>
                      )}
                      {piece.observations && (
                         <span className="text-xs text-amber-700 flex items-center gap-1.5 font-medium bg-amber-50 px-2 py-1 rounded w-fit">
-                          <AlertCircle className="w-3.5 h-3.5" /> {piece.observations}
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {piece.observations}
                         </span>
                      )}
                   </div>
@@ -679,9 +697,10 @@ export default function InventoryPage() {
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
-                    <TableHead className="w-32 font-semibold">SKU</TableHead>
-                    <TableHead className="font-semibold">Produto</TableHead>
-                    <TableHead className="font-semibold">Etiquetas</TableHead>
+                    <TableHead className="w-24 font-semibold">Imagem</TableHead>
+                    <TableHead className="w-24 font-semibold">SKU</TableHead>
+                    <TableHead className="font-semibold min-w-50">Produto</TableHead>
+                    <TableHead className="font-semibold min-w-37.5">Etiquetas</TableHead>
                     <TableHead className="text-right font-semibold">Custo</TableHead>
                     <TableHead className="text-center font-semibold">Vitrine</TableHead>
                     <TableHead className="text-right w-36 font-semibold">Ações</TableHead>
@@ -690,20 +709,38 @@ export default function InventoryPage() {
                 <TableBody>
                   {filteredPieces.map((piece) => (
                     <TableRow key={piece.id} className="hover:bg-zinc-50/80 transition-colors">
-                      <TableCell className="font-medium text-[#4B4B4B] text-xs">{piece.code}</TableCell>
                       <TableCell>
-                        <div className="flex flex-col gap-1">
-                          <span className="font-semibold text-[#0A244A]">{piece.name}</span>
+                        {/* Miniatura da Imagem - Desktop */}
+                        <div className="w-12 h-12 rounded-md bg-zinc-100 border border-zinc-200 overflow-hidden relative flex items-center justify-center">
+                          {piece.images && piece.images.length > 0 ? (
+                            <Image 
+                              src={piece.images[0].imageUrl} 
+                              alt={piece.name}
+                              fill
+                              className="object-cover hover:scale-110 transition-transform cursor-pointer"
+                              sizes="48px"
+                            />
+                          ) : (
+                            <ImageIcon className="w-5 h-5 text-zinc-300" />
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-medium text-[#4B4B4B] text-xs">
+                        <span className="bg-zinc-100 px-1.5 py-0.5 rounded">{piece.code}</span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-semibold text-[#0A244A] line-clamp-1">{piece.name}</span>
                           <span className="text-xs text-zinc-500 truncate max-w-62.5">
                             Origem: {piece.lot?.sourceName}
                           </span>
                           {piece.observations && (
-                            <span className="text-xs text-amber-600 flex items-center gap-1 font-medium bg-amber-50 px-1.5 py-0.5 rounded w-fit">
+                            <span className="text-[11px] text-amber-600 flex items-center gap-1 font-medium bg-amber-50 px-1.5 py-0.5 rounded w-fit mt-0.5">
                               <AlertCircle className="w-3 h-3 shrink-0" /> {piece.observations}
                             </span>
                           )}
                           {piece.store && piece.tags.includes("Em consignação") && (
-                            <span className="text-xs text-purple-700 flex items-center gap-1 font-medium bg-purple-50 px-1.5 py-0.5 rounded w-fit">
+                            <span className="text-[11px] text-purple-700 flex items-center gap-1 font-medium bg-purple-50 px-1.5 py-0.5 rounded w-fit mt-0.5">
                               <Store className="w-3 h-3 shrink-0" /> Em {piece.store.name}
                             </span>
                           )}
