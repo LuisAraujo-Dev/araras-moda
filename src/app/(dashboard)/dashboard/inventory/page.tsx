@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Package, PlusCircle, Tag, CheckCircle2, AlertCircle, Filter, Pencil, Trash2, Store, ArrowLeft, Globe, Eye, EyeOff } from "lucide-react";
+import { Package, PlusCircle, Tag, CheckCircle2, AlertCircle, Filter, Pencil, Trash2, Store, ArrowLeft, Globe, Eye, EyeOff, ChevronDown, Search, Check } from "lucide-react";
 import { getPiecesAction, createPieceAction, updatePieceAction, deletePieceAction, getTaxonomyAction, quickAddCategory, quickAddBrand, quickAddSize, quickAddColor, quickAddLot, quickAddStore } from "@/app/actions/piece.actions";
 import { togglePieceVisibilityAction } from "@/app/actions/storefront.actions";
 import { checkOnboardingStatusAction } from "@/app/actions/setup.actions";
@@ -47,6 +47,116 @@ const TAG_COLORS: Record<string, string> = {
 };
 
 const AVAILABLE_TAGS = Object.keys(TAG_COLORS);
+
+type SelectOption = {
+  id: string;
+  name?: string;
+  sourceName?: string;
+  code?: string;
+};
+
+function SearchableSelect({ 
+  value, 
+  onChange, 
+  options, 
+  placeholder, 
+  newItemLabel, 
+  onAddNew 
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  options: SelectOption[];
+  placeholder: string;
+  newItemLabel: string;
+  onAddNew: () => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const getText = (opt: SelectOption) => {
+    if (opt.name) return opt.name;
+    if (opt.sourceName) return `${opt.sourceName} (${opt.code})`;
+    return "";
+  };
+  
+  const selectedItem = options.find((o) => o.id === value);
+  const displayText = selectedItem ? getText(selectedItem) : placeholder;
+
+  const filtered = options.filter((o) => {
+    return getText(o).toLowerCase().includes(search.toLowerCase());
+  }).sort((a, b) => {
+    const textA = getText(a).toLowerCase();
+    const textB = getText(b).toLowerCase();
+    const s = search.toLowerCase();
+    if (textA.startsWith(s) && !textB.startsWith(s)) return -1;
+    if (!textA.startsWith(s) && textB.startsWith(s)) return 1;
+    return 0;
+  });
+
+  return (
+    <div className="relative">
+      <input 
+        type="text" 
+        value={value} 
+        required 
+        tabIndex={-1}
+        className="absolute opacity-0 w-0 h-0 pointer-events-none -z-10" 
+        onChange={() => {}}
+      />
+      <div 
+        className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm flex items-center justify-between cursor-pointer focus-within:border-[#1E5AA8] focus-within:ring-1 focus-within:ring-[#1E5AA8] transition-colors"
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <span className={`truncate ${selectedItem ? "text-zinc-900" : "text-zinc-500"}`}>{displayText}</span>
+        <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0" />
+      </div>
+      
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-60" onClick={() => setIsOpen(false)}></div>
+          <div className="absolute z-70 mt-1 w-full bg-white border border-zinc-200 rounded-md shadow-xl max-h-64 flex flex-col overflow-hidden">
+            <div className="bg-white p-2 border-b border-zinc-100 shrink-0">
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-2 top-2 text-zinc-400" />
+                <input 
+                  autoFocus
+                  type="text" 
+                  className="w-full h-8 pl-8 pr-3 text-sm bg-zinc-50 border border-zinc-200 rounded focus:border-[#1E5AA8] focus:ring-1 focus:ring-[#1E5AA8] outline-none transition-all" 
+                  placeholder="Buscar..." 
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="p-1 overflow-y-auto custom-scrollbar">
+              {filtered.length === 0 ? (
+                <div className="px-3 py-4 text-sm text-zinc-500 text-center font-medium">Nenhum resultado encontrado</div>
+              ) : (
+                filtered.map((opt) => (
+                   <div 
+                     key={opt.id} 
+                     className="px-3 py-2 text-sm hover:bg-zinc-100 rounded cursor-pointer flex items-center justify-between transition-colors"
+                     onClick={() => { onChange(opt.id); setIsOpen(false); setSearch(""); }}
+                   >
+                     <span className="truncate pr-2">{getText(opt)}</span>
+                     {value === opt.id && <Check className="w-4 h-4 text-[#1E5AA8] shrink-0" />}
+                   </div>
+                ))
+              )}
+              <div className="border-t border-zinc-100 my-1"></div>
+              <div 
+                className="px-3 py-2.5 text-sm font-bold text-[#1E5AA8] hover:bg-blue-50 rounded cursor-pointer flex items-center gap-2 transition-colors"
+                onClick={() => { onAddNew(); setIsOpen(false); setSearch(""); }}
+              >
+                <PlusCircle className="w-4 h-4 shrink-0" /> <span className="truncate">{newItemLabel}</span>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 export default function InventoryPage() {
   const [companyId, setCompanyId] = useState<string>("");
@@ -323,49 +433,64 @@ export default function InventoryPage() {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1">
                         <Label className="text-[#0A244A]">Categoria</Label>
-                        <select value={catId} onChange={(e) => e.target.value === "NEW" ? triggerQuickAdd('category', 'Categoria') : setCatId(e.target.value)} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
-                          <option value="">Selecione...</option>
-                          {taxonomy.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                          <option value="NEW" className="font-bold text-[#1E5AA8]">+ Cadastrar Nova Categoria</option>
-                        </select>
+                        <SearchableSelect
+                          value={catId}
+                          onChange={setCatId}
+                          options={taxonomy.categories}
+                          placeholder="Selecione..."
+                          newItemLabel="Cadastrar Nova Categoria"
+                          onAddNew={() => triggerQuickAdd('category', 'Categoria')}
+                        />
                       </div>
                       <div className="space-y-1">
                         <Label className="text-[#0A244A]">Marca</Label>
-                        <select value={brandId} onChange={(e) => e.target.value === "NEW" ? triggerQuickAdd('brand', 'Marca') : setBrandId(e.target.value)} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
-                          <option value="">Selecione...</option>
-                          {taxonomy.brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                          <option value="NEW" className="font-bold text-[#1E5AA8]">+ Cadastrar Nova Marca</option>
-                        </select>
+                        <SearchableSelect
+                          value={brandId}
+                          onChange={setBrandId}
+                          options={taxonomy.brands}
+                          placeholder="Selecione..."
+                          newItemLabel="Cadastrar Nova Marca"
+                          onAddNew={() => triggerQuickAdd('brand', 'Marca')}
+                        />
                       </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1">
                         <Label className="text-[#0A244A]">Tamanho</Label>
-                        <select value={sizeId} onChange={(e) => e.target.value === "NEW" ? triggerQuickAdd('size', 'Tamanho') : setSizeId(e.target.value)} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
-                          <option value="">Selecione...</option>
-                          {taxonomy.sizes.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                          <option value="NEW" className="font-bold text-[#1E5AA8]">+ Cadastrar Novo Tamanho</option>
-                        </select>
+                        <SearchableSelect
+                          value={sizeId}
+                          onChange={setSizeId}
+                          options={taxonomy.sizes}
+                          placeholder="Selecione..."
+                          newItemLabel="Cadastrar Novo Tamanho"
+                          onAddNew={() => triggerQuickAdd('size', 'Tamanho')}
+                        />
                       </div>
                       <div className="space-y-1">
                         <Label className="text-[#0A244A]">Cor</Label>
-                        <select value={colorId} onChange={(e) => e.target.value === "NEW" ? triggerQuickAdd('color', 'Cor') : setColorId(e.target.value)} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
-                          <option value="">Selecione...</option>
-                          {taxonomy.colors.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                          <option value="NEW" className="font-bold text-[#1E5AA8]">+ Cadastrar Nova Cor</option>
-                        </select>
+                        <SearchableSelect
+                          value={colorId}
+                          onChange={setColorId}
+                          options={taxonomy.colors}
+                          placeholder="Selecione..."
+                          newItemLabel="Cadastrar Nova Cor"
+                          onAddNew={() => triggerQuickAdd('color', 'Cor')}
+                        />
                       </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1">
                         <Label className="text-[#0A244A]">Origem / Lote</Label>
-                        <select value={lotId} onChange={(e) => e.target.value === "NEW" ? triggerQuickAdd('lot', 'Origem') : setLotId(e.target.value)} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
-                          <option value="">Selecione...</option>
-                          {taxonomy.lots.map(l => <option key={l.id} value={l.id}>{l.sourceName} ({l.code})</option>)}
-                          <option value="NEW" className="font-bold text-[#1E5AA8]">+ Cadastrar Nova Origem</option>
-                        </select>
+                        <SearchableSelect
+                          value={lotId}
+                          onChange={setLotId}
+                          options={taxonomy.lots}
+                          placeholder="Selecione..."
+                          newItemLabel="Cadastrar Nova Origem"
+                          onAddNew={() => triggerQuickAdd('lot', 'Origem')}
+                        />
                       </div>
                       <div className="space-y-1">
                         <Label htmlFor="purchasePrice" className="text-[#0A244A]">Custo / Compra (R$)</Label>
@@ -386,11 +511,14 @@ export default function InventoryPage() {
                       {isConsigned && (
                         <div className="pt-4 border-t border-zinc-200 mt-4">
                           <Label className="text-purple-900 mb-2 block">Parceiro (Consignação)</Label>
-                          <select value={storeId} onChange={(e) => e.target.value === "NEW" ? triggerQuickAdd('store', 'Parceiro') : setStoreId(e.target.value)} className="w-full h-10 px-3 rounded-md border border-purple-200 bg-purple-50 text-sm" required={isConsigned}>
-                            <option value="">Onde está a peça?</option>
-                            {taxonomy.stores.map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
-                            <option value="NEW" className="font-bold text-purple-700">+ Cadastrar Novo Parceiro</option>
-                          </select>
+                          <SearchableSelect
+                            value={storeId}
+                            onChange={setStoreId}
+                            options={taxonomy.stores}
+                            placeholder="Onde está a peça?"
+                            newItemLabel="Cadastrar Novo Parceiro"
+                            onAddNew={() => triggerQuickAdd('store', 'Parceiro')}
+                          />
                         </div>
                       )}
 
