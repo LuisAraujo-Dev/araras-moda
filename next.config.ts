@@ -1,13 +1,14 @@
-import type { NextConfig } from "next";
-import withPWAInit from "@ducanh2912/next-pwa";
-
-const withPWA = withPWAInit({
-  dest: "public",
-  disable: process.env.NODE_ENV === "development",
-});
-
-const nextConfig: NextConfig = {
-  turbopack: {},
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '*.public.blob.vercel-storage.com',
+        port: '',
+      },
+    ],
+  },
 };
 
-export default withPWA(nextConfig);
+export default nextConfig;
