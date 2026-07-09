@@ -306,42 +306,47 @@ export default function InventoryPage() {
     event.preventDefault(); 
     if (!companyId) return;
 
-    setLoading(true);
-    let finalImageUrl = imagePreview; // Mantém a URL existente se for uma edição e não houver nova foto
+    // 1. CAPTURA DOS DADOS DO FORMULÁRIO (SÍNCRONO)
+    // Extraímos os dados de texto *antes* de iniciar o processo assíncrono da imagem.
+    // Assim prevenimos o "crash" interno do React que congelava a aplicação.
+    const formData = new FormData(event.currentTarget);
 
-    // Se a utilizadora tiver selecionado uma NOVA imagem
+    setLoading(true);
+    let finalImageUrl = imagePreview; // Mantém a URL existente se for edição e não mudar foto
+
+    // 2. ENVIO DA IMAGEM PARA A VERCEL BLOB
     if (imageFile) {
       setIsUploading(true);
-      const formData = new FormData();
-      formData.append("file", imageFile);
 
       try {
-        const res = await fetch("/api/upload", { 
+        // Ajuste: A Vercel espera o nome do ficheiro na URL e o ficheiro bruto no "body"
+        const res = await fetch(`/api/upload?filename=${encodeURIComponent(imageFile.name)}`, { 
           method: "POST", 
-          body: formData 
+          body: imageFile 
         });
         
         if (res.ok) {
           const blob = await res.json();
-          finalImageUrl = blob.url; // URL pública devolvida pela Vercel Blob
+          finalImageUrl = blob.url; // URL pública da imagem recém guardada
         } else {
-          console.error("Erro no response do upload da imagem.");
-          showBanner("Erro ao processar imagem, mas a peça será salva.", "error");
+          console.error("Erro no response do upload da imagem:", await res.text());
+          showBanner("Aviso: Falha ao guardar a foto, mas a peça será cadastrada.", "error");
         }
       } catch (e) {
-        console.error("Erro no envio do upload:", e);
+        console.error("Erro de conexão no upload:", e);
+        showBanner("Erro de conexão na fotografia.", "error");
       }
       setIsUploading(false);
     }
 
-    const formData = new FormData(event.currentTarget);
+    // 3. SALVAR OS DADOS NO BANCO DE DADOS
     const catName = taxonomy.categories.find(c => c.id === catId)?.name || "";
     const brandName = taxonomy.brands.find(b => b.id === brandId)?.name || "";
     const sizeName = taxonomy.sizes.find(s => s.id === sizeId)?.name || "";
     const colorName = taxonomy.colors.find(c => c.id === colorId)?.name || "";
     const autoName = [catName, brandName, sizeName ? `Tamanho ${sizeName}` : "", colorName].filter(Boolean).join(" ") || "Nova Peça";
 
-    // Se o preview for local (blob:...), evitamos salvar essa string no banco de dados
+    // Garante que só guarda URLs válidas (evita guardar as strings blob: locais do navegador)
     const safeImageUrl = finalImageUrl && !finalImageUrl.startsWith('blob:') ? finalImageUrl : undefined;
 
     const data = {
@@ -364,14 +369,14 @@ export default function InventoryPage() {
       ? await updatePieceAction(editingPiece.id, companyId, data) 
       : await createPieceAction(companyId, data);
       
-    setLoading(false);
+    setLoading(false); // Agora este código corre sempre, destrancando o ecrã!
 
     if (result.success) {
       handleCloseModal(false);
       showBanner(editingPiece ? "Peça atualizada!" : "Peça guardada com foto!", "success");
       await loadData(companyId);
     } else {
-      showBanner(result.error || "Erro ao salvar", "error");
+      showBanner(result.error || "Erro ao salvar na base de dados.", "error");
     }
   }
 
@@ -729,7 +734,7 @@ export default function InventoryPage() {
                     <TableHead className="w-24 font-semibold">Imagem</TableHead>
                     <TableHead className="w-24 font-semibold">SKU</TableHead>
                     <TableHead className="font-semibold min-w-50">Produto</TableHead>
-                    <TableHead className="font-semibold min-w-50">Etiquetas</TableHead>
+                    <TableHead className="font-semibold min-w-37.5">Etiquetas</TableHead>
                     <TableHead className="text-right font-semibold">Custo</TableHead>
                     <TableHead className="text-center font-semibold">Vitrine</TableHead>
                     <TableHead className="text-right w-36 font-semibold">Ações</TableHead>
