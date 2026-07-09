@@ -2,24 +2,22 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { getServerSession } from "next-auth/next";
 
-async function getRealCompanyId(providedId: string) {
-  if (providedId !== "company-placeholder-id") return providedId;
-  const company = await prisma.company.findFirst();
-  return company?.id || providedId;
-}
-
-export async function getSettingsDataAction(companyId: string) {
+// Busca os dados baseados na pessoa que está logada
+export async function getSettingsDataAction() {
   try {
-    const realId = await getRealCompanyId(companyId);
-    
-    const company = await prisma.company.findUnique({ 
-      where: { id: realId } 
+    const session = await getServerSession();
+    if (!session?.user?.email) return { success: false, error: "Não autorizado" };
+
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
     });
-    
-    // Como estamos a usar um mock, vamos buscar o primeiro utilizador desta empresa
-    const user = await prisma.user.findFirst({ 
-      where: { companyId: realId } 
+
+    if (!user) return { success: false, error: "Utilizador não encontrado" };
+
+    const company = await prisma.company.findUnique({
+      where: { id: user.companyId },
     });
 
     return { success: true, company, user };
@@ -29,38 +27,71 @@ export async function getSettingsDataAction(companyId: string) {
   }
 }
 
-export async function updateCompanyAction(companyId: string, name: string) {
+export async function updateCompanyAction(name: string) {
   try {
-    const realId = await getRealCompanyId(companyId);
-    if (!name || name.trim() === "") return { error: "O nome da empresa não pode estar vazio." };
+    const session = await getServerSession();
+    if (!session?.user?.email) return { success: false, error: "Não autorizado" };
+
+    const user = await prisma.user.findUnique({ where: { email: session.user.email } });
+    if (!user) return { success: false, error: "Utilizador não encontrado" };
+
+    if (!name || name.trim() === "") return { success: false, error: "O nome da empresa não pode estar vazio." };
 
     await prisma.company.update({
-      where: { id: realId },
+      where: { id: user.companyId },
       data: { name },
     });
     
     revalidatePath("/dashboard/settings");
-    revalidatePath("/dashboard"); // Atualiza o nome no menu lateral se necessário
+    revalidatePath("/dashboard", "layout"); // Atualiza o nome no menu lateral
     return { success: true };
   } catch (error) {
     console.error(error);
-    return { error: "Falha ao atualizar os dados da empresa." };
+    return { success: false, error: "Falha ao atualizar os dados da empresa." };
   }
 }
 
-export async function updateUserProfileAction(userId: string, name: string) {
+export async function updateUserProfileAction(name: string) {
   try {
-    if (!name || name.trim() === "") return { error: "O nome não pode estar vazio." };
+    const session = await getServerSession();
+    if (!session?.user?.email) return { success: false, error: "Não autorizado" };
+
+    if (!name || name.trim() === "") return { success: false, error: "O nome não pode estar vazio." };
 
     await prisma.user.update({
-      where: { id: userId },
+      where: { email: session.user.email },
       data: { name },
     });
     
     revalidatePath("/dashboard/settings");
+    revalidatePath("/dashboard", "layout"); // Atualiza a inicial no menu lateral
     return { success: true };
   } catch (error) {
     console.error(error);
-    return { error: "Falha ao atualizar o perfil." };
+    return { success: false, error: "Falha ao atualizar o perfil." };
+  }
+}
+
+// Nova ação de exclusão em cascata
+export async function deleteAccountAction() {
+  try {
+    const session = await getServerSession();
+    if (!session?.user?.email) return { success: false, error: "Não autorizado" };
+
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email }
+    });
+
+    if (!user) return { success: false, error: "Utilizador não encontrado" };
+
+    // Apagar a Empresa causa um efeito cascata que apaga o Utilizador, Peças, Lotes, etc.
+    await prisma.company.delete({
+      where: { id: user.companyId }
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error("Erro ao excluir conta:", error);
+    return { success: false, error: "Falha ao excluir a conta." };
   }
 }

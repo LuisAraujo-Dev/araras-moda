@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CheckCircle2, AlertCircle, Building2, User, Shield, Save } from "lucide-react";
-import { getSettingsDataAction, updateCompanyAction, updateUserProfileAction } from "@/app/actions/settings.actions";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { CheckCircle2, AlertCircle, Building2, User, Shield, Save, AlertTriangle, Trash2, Loader2 } from "lucide-react";
+import { getSettingsDataAction, updateCompanyAction, updateUserProfileAction, deleteAccountAction } from "@/app/actions/settings.actions";
 
-// 1. Definimos exatamente qual é o formato dos dados para agradar ao TypeScript (e remover o erro de "any")
 type CompanyData = {
   id: string;
   name: string;
@@ -21,8 +22,6 @@ type UserData = {
 };
 
 export default function SettingsPage() {
-  const mockCompanyId = "company-placeholder-id";
-
   const [company, setCompany] = useState<CompanyData | null>(null);
   const [user, setUser] = useState<UserData | null>(null);
   
@@ -32,20 +31,24 @@ export default function SettingsPage() {
   
   const [banner, setBanner] = useState({ show: false, message: "", type: "" });
 
+  // Estados para a Zona de Perigo
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [loadingDelete, setLoadingDelete] = useState(false);
+
   const loadData = async () => {
-    const result = await getSettingsDataAction(mockCompanyId);
+    const result = await getSettingsDataAction();
     if (result.success) {
       setCompany(result.company as CompanyData);
       setUser(result.user as UserData);
     }
   };
 
-  // 2. Corrigimos o useEffect para não causar renders em cascata
   useEffect(() => {
     let isMounted = true;
     
     const fetchInitialData = async () => {
-      const result = await getSettingsDataAction(mockCompanyId);
+      const result = await getSettingsDataAction();
       if (isMounted) {
         if (result.success) {
           setCompany(result.company as CompanyData);
@@ -73,7 +76,7 @@ export default function SettingsPage() {
     const formData = new FormData(e.currentTarget);
     const newName = formData.get("companyName") as string;
     
-    const result = await updateCompanyAction(mockCompanyId, newName);
+    const result = await updateCompanyAction(newName);
     setLoadingCompany(false);
 
     if (result.success) {
@@ -92,7 +95,7 @@ export default function SettingsPage() {
     const formData = new FormData(e.currentTarget);
     const newName = formData.get("userName") as string;
     
-    const result = await updateUserProfileAction(user.id, newName);
+    const result = await updateUserProfileAction(newName);
     setLoadingUser(false);
 
     if (result.success) {
@@ -100,6 +103,20 @@ export default function SettingsPage() {
       await loadData();
     } else {
       showBanner(result.error || "Erro ao atualizar perfil.", "error");
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (confirmText !== "EXCLUIR") return;
+    setLoadingDelete(true);
+
+    const result = await deleteAccountAction();
+    
+    if (result.success) {
+      await signOut({ callbackUrl: "/" });
+    } else {
+      showBanner(result.error || "Erro ao excluir conta.", "error");
+      setLoadingDelete(false);
     }
   };
 
@@ -112,7 +129,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-8 relative max-w-4xl">
+    <div className="space-y-8 relative max-w-4xl pb-10">
       {banner.show && (
         <div className={`fixed top-6 right-6 z-50 flex items-center gap-3 px-5 py-4 rounded-lg shadow-xl transition-all min-w-80 ${banner.type === "success" ? "bg-emerald-50 text-emerald-900 border border-emerald-200" : "bg-rose-50 text-rose-900 border border-rose-200"}`}>
           {banner.type === "success" ? <CheckCircle2 className="w-5 h-5 text-emerald-600" /> : <AlertCircle className="w-5 h-5 text-rose-600" />}
@@ -211,8 +228,73 @@ export default function SettingsPage() {
             </form>
           </div>
         </div>
-
       </div>
+
+      {/* Zona de Perigo (Exclusão) */}
+      <div className="bg-rose-50 rounded-xl border border-rose-200 shadow-sm overflow-hidden mt-8">
+        <div className="p-6 border-b border-rose-200 flex items-center gap-3">
+          <div className="p-2 bg-rose-100 rounded-lg">
+            <AlertTriangle className="w-5 h-5 text-rose-600" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-rose-800">Zona de Perigo</h2>
+            <p className="text-sm text-rose-600/80">Ações irreversíveis para a sua conta e dados</p>
+          </div>
+        </div>
+        
+        <div className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+          <div>
+            <h3 className="font-semibold text-rose-900">Excluir Conta e Apagar Dados</h3>
+            <p className="text-sm text-rose-700 mt-1 max-w-xl">
+              Esta ação irá apagar permanentemente a sua conta, incluindo todas as peças do estoque, parceiros, histórico financeiro e relatórios. <strong>Não é possível recuperar os dados depois.</strong>
+            </p>
+          </div>
+          
+          <Dialog open={deleteOpen} onOpenChange={(val) => { setDeleteOpen(val); setConfirmText(""); }}>
+            <DialogTrigger asChild>
+              <Button variant="destructive" className="shrink-0 bg-rose-600 hover:bg-rose-700 cursor-pointer h-11 px-6">
+                <Trash2 className="w-4 h-4 mr-2" /> Excluir a minha conta
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md rounded-xl">
+              <DialogHeader>
+                <DialogTitle className="text-rose-600 flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5" /> Exclusão Definitiva
+                </DialogTitle>
+                <DialogDescription className="text-zinc-600 mt-2 text-base">
+                  Está prestes a apagar a sua loja inteira. Todos os registos serão <strong>permanentemente destruídos</strong>.
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="my-4 space-y-3">
+                <p className="text-sm font-medium text-zinc-700">
+                  Para confirmar, digite <span className="font-bold text-rose-600 select-none">EXCLUIR</span> no campo abaixo:
+                </p>
+                <Input 
+                  value={confirmText}
+                  onChange={(e) => setConfirmText(e.target.value)}
+                  placeholder="EXCLUIR"
+                  className="border-zinc-300 focus-visible:ring-rose-500 font-medium"
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <Button variant="outline" className="flex-1 cursor-pointer" onClick={() => setDeleteOpen(false)} disabled={loadingDelete}>
+                  Cancelar
+                </Button>
+                <Button 
+                  className="flex-1 bg-rose-600 hover:bg-rose-700 text-white cursor-pointer" 
+                  onClick={handleDeleteAccount} 
+                  disabled={confirmText !== "EXCLUIR" || loadingDelete}
+                >
+                  {loadingDelete ? <Loader2 className="w-4 h-4 animate-spin" /> : "Sim, Excluir Tudo"}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+
     </div>
   );
 }
