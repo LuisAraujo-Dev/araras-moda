@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Package, PlusCircle, Tag, CheckCircle2, AlertCircle, Filter, Pencil, Trash2, Store, ArrowLeft, Globe, Eye, EyeOff, ChevronDown, Search, Check, ImageIcon } from "lucide-react";
+import { Package, PlusCircle, Tag, CheckCircle2, AlertCircle, Filter, Pencil, Trash2, Store, ArrowLeft, Globe, Eye, EyeOff, ChevronDown, Search, Check, ImageIcon, Camera, Loader2 } from "lucide-react";
 import { getPiecesAction, createPieceAction, updatePieceAction, deletePieceAction, getTaxonomyAction, quickAddCategory, quickAddBrand, quickAddSize, quickAddColor, quickAddLot, quickAddStore } from "@/app/actions/piece.actions";
 import { togglePieceVisibilityAction } from "@/app/actions/storefront.actions";
 import { checkOnboardingStatusAction } from "@/app/actions/setup.actions";
@@ -58,19 +58,9 @@ type SelectOption = {
 };
 
 function SearchableSelect({ 
-  value, 
-  onChange, 
-  options, 
-  placeholder, 
-  newItemLabel, 
-  onAddNew 
+  value, onChange, options, placeholder, newItemLabel, onAddNew 
 }: {
-  value: string;
-  onChange: (val: string) => void;
-  options: SelectOption[];
-  placeholder: string;
-  newItemLabel: string;
-  onAddNew: () => void;
+  value: string; onChange: (val: string) => void; options: SelectOption[]; placeholder: string; newItemLabel: string; onAddNew: () => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -97,14 +87,7 @@ function SearchableSelect({
 
   return (
     <div className="relative">
-      <input 
-        type="text" 
-        value={value} 
-        required 
-        tabIndex={-1}
-        className="absolute opacity-0 w-0 h-0 pointer-events-none -z-10" 
-        onChange={() => {}}
-      />
+      <input type="text" value={value} required tabIndex={-1} className="absolute opacity-0 w-0 h-0 pointer-events-none -z-10" onChange={() => {}} />
       <div 
         className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm flex items-center justify-between cursor-pointer focus-within:border-[#1E5AA8] focus-within:ring-1 focus-within:ring-[#1E5AA8] transition-colors"
         onClick={() => setIsOpen(!isOpen)}
@@ -121,12 +104,8 @@ function SearchableSelect({
               <div className="relative">
                 <Search className="w-4 h-4 absolute left-2 top-2 text-zinc-400" />
                 <input 
-                  autoFocus
-                  type="text" 
-                  className="w-full h-8 pl-8 pr-3 text-sm bg-zinc-50 border border-zinc-200 rounded focus:border-[#1E5AA8] focus:ring-1 focus:ring-[#1E5AA8] outline-none transition-all" 
-                  placeholder="Buscar..." 
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
+                  autoFocus type="text" className="w-full h-8 pl-8 pr-3 text-sm bg-zinc-50 border border-zinc-200 rounded focus:border-[#1E5AA8] focus:ring-1 focus:ring-[#1E5AA8] outline-none transition-all" 
+                  placeholder="Buscar..." value={search} onChange={e => setSearch(e.target.value)}
                 />
               </div>
             </div>
@@ -136,8 +115,7 @@ function SearchableSelect({
               ) : (
                 filtered.map((opt) => (
                    <div 
-                     key={opt.id} 
-                     className="px-3 py-2 text-sm hover:bg-zinc-100 rounded cursor-pointer flex items-center justify-between transition-colors"
+                     key={opt.id} className="px-3 py-2 text-sm hover:bg-zinc-100 rounded cursor-pointer flex items-center justify-between transition-colors"
                      onClick={() => { onChange(opt.id); setIsOpen(false); setSearch(""); }}
                    >
                      <span className="truncate pr-2">{getText(opt)}</span>
@@ -166,6 +144,7 @@ export default function InventoryPage() {
   const [taxonomy, setTaxonomy] = useState<TaxonomyData>({ categories: [], brands: [], lots: [], sizes: [], colors: [], stores: [] });
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [banner, setBanner] = useState({ show: false, message: "", type: "" });
 
   const [editingPiece, setEditingPiece] = useState<PieceWithRelations | null>(null);
@@ -179,6 +158,11 @@ export default function InventoryPage() {
   const [storeId, setStoreId] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [filterTags, setFilterTags] = useState<string[]>([]);
+
+  // Estados para Gestão de Imagens
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [quickAdd, setQuickAdd] = useState({ isOpen: false, type: "", label: "" });
   const [quickAddValue, setQuickAddValue] = useState("");
@@ -285,6 +269,14 @@ export default function InventoryPage() {
     setFilterTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
   };
 
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setImageFile(file);
+      setImagePreview(URL.createObjectURL(file));
+    }
+  };
+
   const handleEditClick = (piece: PieceWithRelations) => {
     setEditingPiece(piece); 
     setCatId(piece.categoryId); 
@@ -294,6 +286,8 @@ export default function InventoryPage() {
     setLotId(piece.lotId);
     setStoreId(piece.storeId || ""); 
     setSelectedTags(piece.tags || []); 
+    setImagePreview(piece.images && piece.images.length > 0 ? piece.images[0].imageUrl : null);
+    setImageFile(null);
     setOpen(true);
   };
 
@@ -303,6 +297,8 @@ export default function InventoryPage() {
       setEditingPiece(null);
       setQuickAdd({ isOpen: false, type: "", label: "" });
       setCatId(""); setBrandId(""); setSizeId(""); setColorId(""); setLotId(""); setStoreId(""); setSelectedTags([]);
+      setImagePreview(null);
+      setImageFile(null);
     }
   };
 
@@ -311,13 +307,42 @@ export default function InventoryPage() {
     if (!companyId) return;
 
     setLoading(true);
+    let finalImageUrl = imagePreview; // Mantém a URL existente se for uma edição e não houver nova foto
+
+    // Se a utilizadora tiver selecionado uma NOVA imagem
+    if (imageFile) {
+      setIsUploading(true);
+      const formData = new FormData();
+      formData.append("file", imageFile);
+
+      try {
+        const res = await fetch("/api/upload", { 
+          method: "POST", 
+          body: formData 
+        });
+        
+        if (res.ok) {
+          const blob = await res.json();
+          finalImageUrl = blob.url; // URL pública devolvida pela Vercel Blob
+        } else {
+          console.error("Erro no response do upload da imagem.");
+          showBanner("Erro ao processar imagem, mas a peça será salva.", "error");
+        }
+      } catch (e) {
+        console.error("Erro no envio do upload:", e);
+      }
+      setIsUploading(false);
+    }
+
     const formData = new FormData(event.currentTarget);
-    
     const catName = taxonomy.categories.find(c => c.id === catId)?.name || "";
     const brandName = taxonomy.brands.find(b => b.id === brandId)?.name || "";
     const sizeName = taxonomy.sizes.find(s => s.id === sizeId)?.name || "";
     const colorName = taxonomy.colors.find(c => c.id === colorId)?.name || "";
     const autoName = [catName, brandName, sizeName ? `Tamanho ${sizeName}` : "", colorName].filter(Boolean).join(" ") || "Nova Peça";
+
+    // Se o preview for local (blob:...), evitamos salvar essa string no banco de dados
+    const safeImageUrl = finalImageUrl && !finalImageUrl.startsWith('blob:') ? finalImageUrl : undefined;
 
     const data = {
       name: autoName, 
@@ -331,7 +356,8 @@ export default function InventoryPage() {
       storeId: isConsigned ? (storeId || null) : null, 
       purchasePrice: Number(formData.get("purchasePrice")),
       registerSale: showSalePriceInput, 
-      salePrice: showSalePriceInput ? Number(formData.get("salePrice")) : undefined
+      salePrice: showSalePriceInput ? Number(formData.get("salePrice")) : undefined,
+      imageUrl: safeImageUrl
     };
 
     const result = editingPiece 
@@ -342,10 +368,10 @@ export default function InventoryPage() {
 
     if (result.success) {
       handleCloseModal(false);
-      showBanner(editingPiece ? "Peça atualizada!" : "Peça guardada!", "success");
+      showBanner(editingPiece ? "Peça atualizada!" : "Peça guardada com foto!", "success");
       await loadData(companyId);
     } else {
-      showBanner(result.error || "Erro", "error");
+      showBanner(result.error || "Erro ao salvar", "error");
     }
   }
 
@@ -428,31 +454,56 @@ export default function InventoryPage() {
                   <DialogHeader>
                     <DialogTitle className="text-[#0A244A]">{editingPiece ? "Editar Peça" : "Cadastrar Peça"}</DialogTitle>
                     <DialogDescription className="text-[#4B4B4B] text-xs sm:text-sm">
-                      O nome e o código SKU são gerados automaticamente.
+                      Pode tirar a foto no momento do cadastro e gerir os dados da peça.
                     </DialogDescription>
                   </DialogHeader>
                   <form onSubmit={handleSubmit} className="space-y-5 pt-2">
+                    
+                    {/* Botão Quadrado Gigante de Upload */}
+                    <div className="flex justify-center mb-6">
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        capture="environment" 
+                        className="hidden" 
+                        ref={fileInputRef} 
+                        onChange={handleImageChange} 
+                      />
+                      <div 
+                        onClick={() => fileInputRef.current?.click()}
+                        className="w-32 h-32 sm:w-40 sm:h-40 rounded-xl border-2 border-dashed border-zinc-300 bg-zinc-50 flex flex-col items-center justify-center cursor-pointer hover:bg-zinc-100 hover:border-[#1E5AA8] transition-all overflow-hidden relative group shadow-sm"
+                      >
+                        {imagePreview ? (
+                          <>
+                            <Image src={imagePreview} alt="Preview" fill className="object-cover" sizes="160px" />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                              <Camera className="w-8 h-8 text-white drop-shadow-md" />
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <Camera className="w-8 h-8 text-zinc-400 mb-2 group-hover:text-[#1E5AA8] transition-colors" />
+                            <span className="text-xs font-medium text-zinc-500 group-hover:text-[#1E5AA8] transition-colors text-center px-2">
+                              Tirar Foto<br/>(ou Galeria)
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-1">
                         <Label className="text-[#0A244A]">Categoria</Label>
                         <SearchableSelect
-                          value={catId}
-                          onChange={setCatId}
-                          options={taxonomy.categories}
-                          placeholder="Selecione..."
-                          newItemLabel="Cadastrar Nova Categoria"
-                          onAddNew={() => triggerQuickAdd('category', 'Categoria')}
+                          value={catId} onChange={setCatId} options={taxonomy.categories}
+                          placeholder="Selecione..." newItemLabel="Cadastrar Nova Categoria" onAddNew={() => triggerQuickAdd('category', 'Categoria')}
                         />
                       </div>
                       <div className="space-y-1">
                         <Label className="text-[#0A244A]">Marca</Label>
                         <SearchableSelect
-                          value={brandId}
-                          onChange={setBrandId}
-                          options={taxonomy.brands}
-                          placeholder="Selecione..."
-                          newItemLabel="Cadastrar Nova Marca"
-                          onAddNew={() => triggerQuickAdd('brand', 'Marca')}
+                          value={brandId} onChange={setBrandId} options={taxonomy.brands}
+                          placeholder="Selecione..." newItemLabel="Cadastrar Nova Marca" onAddNew={() => triggerQuickAdd('brand', 'Marca')}
                         />
                       </div>
                     </div>
@@ -461,23 +512,15 @@ export default function InventoryPage() {
                       <div className="space-y-1">
                         <Label className="text-[#0A244A]">Tamanho</Label>
                         <SearchableSelect
-                          value={sizeId}
-                          onChange={setSizeId}
-                          options={taxonomy.sizes}
-                          placeholder="Selecione..."
-                          newItemLabel="Cadastrar Novo Tamanho"
-                          onAddNew={() => triggerQuickAdd('size', 'Tamanho')}
+                          value={sizeId} onChange={setSizeId} options={taxonomy.sizes}
+                          placeholder="Selecione..." newItemLabel="Cadastrar Novo Tamanho" onAddNew={() => triggerQuickAdd('size', 'Tamanho')}
                         />
                       </div>
                       <div className="space-y-1">
                         <Label className="text-[#0A244A]">Cor</Label>
                         <SearchableSelect
-                          value={colorId}
-                          onChange={setColorId}
-                          options={taxonomy.colors}
-                          placeholder="Selecione..."
-                          newItemLabel="Cadastrar Nova Cor"
-                          onAddNew={() => triggerQuickAdd('color', 'Cor')}
+                          value={colorId} onChange={setColorId} options={taxonomy.colors}
+                          placeholder="Selecione..." newItemLabel="Cadastrar Nova Cor" onAddNew={() => triggerQuickAdd('color', 'Cor')}
                         />
                       </div>
                     </div>
@@ -486,12 +529,8 @@ export default function InventoryPage() {
                       <div className="space-y-1">
                         <Label className="text-[#0A244A]">Origem / Lote</Label>
                         <SearchableSelect
-                          value={lotId}
-                          onChange={setLotId}
-                          options={taxonomy.lots}
-                          placeholder="Selecione..."
-                          newItemLabel="Cadastrar Nova Origem"
-                          onAddNew={() => triggerQuickAdd('lot', 'Origem')}
+                          value={lotId} onChange={setLotId} options={taxonomy.lots}
+                          placeholder="Selecione..." newItemLabel="Cadastrar Nova Origem" onAddNew={() => triggerQuickAdd('lot', 'Origem')}
                         />
                       </div>
                       <div className="space-y-1">
@@ -514,12 +553,8 @@ export default function InventoryPage() {
                         <div className="pt-4 border-t border-zinc-200 mt-4">
                           <Label className="text-purple-900 mb-2 block">Parceiro (Consignação)</Label>
                           <SearchableSelect
-                            value={storeId}
-                            onChange={setStoreId}
-                            options={taxonomy.stores}
-                            placeholder="Onde está a peça?"
-                            newItemLabel="Cadastrar Novo Parceiro"
-                            onAddNew={() => triggerQuickAdd('store', 'Parceiro')}
+                            value={storeId} onChange={setStoreId} options={taxonomy.stores}
+                            placeholder="Onde está a peça?" newItemLabel="Cadastrar Novo Parceiro" onAddNew={() => triggerQuickAdd('store', 'Parceiro')}
                           />
                         </div>
                       )}
@@ -539,8 +574,9 @@ export default function InventoryPage() {
                       <Input id="observations" name="observations" defaultValue={editingPiece?.observations || ""} placeholder="Ex: Fio puxado na manga direita..." className="h-10" />
                     </div>
 
-                    <Button type="submit" className="w-full mt-2 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white h-12 text-base shadow-sm font-medium" disabled={loading}>
-                      {loading ? "A processar..." : "Salvar Alterações"}
+                    <Button type="submit" className="w-full mt-2 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white h-12 text-base shadow-sm font-medium flex items-center gap-2 justify-center" disabled={loading || isUploading}>
+                      {(loading || isUploading) && <Loader2 className="w-5 h-5 animate-spin" />}
+                      {isUploading ? "A enviar foto..." : loading ? "A guardar..." : "Salvar Alterações"}
                     </Button>
                   </form>
                 </>
@@ -616,16 +652,9 @@ export default function InventoryPage() {
                 <div key={piece.id} className="p-4 flex flex-col gap-3 hover:bg-zinc-50 transition-colors">
                   <div className="flex justify-between items-start gap-3">
                     <div className="flex gap-3 items-start flex-1">
-                      {/* Miniatura da Imagem - Mobile */}
                       <div className="w-16 h-16 rounded-md bg-zinc-100 border border-zinc-200 shrink-0 overflow-hidden relative flex items-center justify-center">
                         {piece.images && piece.images.length > 0 ? (
-                          <Image 
-                            src={piece.images[0].imageUrl} 
-                            alt={piece.name}
-                            fill
-                            className="object-cover"
-                            sizes="64px"
-                          />
+                          <Image src={piece.images[0].imageUrl} alt={piece.name} fill className="object-cover" sizes="64px" />
                         ) : (
                           <ImageIcon className="w-6 h-6 text-zinc-300" />
                         )}
@@ -700,7 +729,7 @@ export default function InventoryPage() {
                     <TableHead className="w-24 font-semibold">Imagem</TableHead>
                     <TableHead className="w-24 font-semibold">SKU</TableHead>
                     <TableHead className="font-semibold min-w-50">Produto</TableHead>
-                    <TableHead className="font-semibold min-w-37.5">Etiquetas</TableHead>
+                    <TableHead className="font-semibold min-w-50">Etiquetas</TableHead>
                     <TableHead className="text-right font-semibold">Custo</TableHead>
                     <TableHead className="text-center font-semibold">Vitrine</TableHead>
                     <TableHead className="text-right w-36 font-semibold">Ações</TableHead>
@@ -710,15 +739,10 @@ export default function InventoryPage() {
                   {filteredPieces.map((piece) => (
                     <TableRow key={piece.id} className="hover:bg-zinc-50/80 transition-colors">
                       <TableCell>
-                        {/* Miniatura da Imagem - Desktop */}
                         <div className="w-12 h-12 rounded-md bg-zinc-100 border border-zinc-200 overflow-hidden relative flex items-center justify-center">
                           {piece.images && piece.images.length > 0 ? (
                             <Image 
-                              src={piece.images[0].imageUrl} 
-                              alt={piece.name}
-                              fill
-                              className="object-cover hover:scale-110 transition-transform cursor-pointer"
-                              sizes="48px"
+                              src={piece.images[0].imageUrl} alt={piece.name} fill className="object-cover hover:scale-110 transition-transform cursor-pointer" sizes="48px"
                             />
                           ) : (
                             <ImageIcon className="w-5 h-5 text-zinc-300" />
@@ -731,9 +755,7 @@ export default function InventoryPage() {
                       <TableCell>
                         <div className="flex flex-col gap-0.5">
                           <span className="font-semibold text-[#0A244A] line-clamp-1">{piece.name}</span>
-                          <span className="text-xs text-zinc-500 truncate max-w-62.5">
-                            Origem: {piece.lot?.sourceName}
-                          </span>
+                          <span className="text-xs text-zinc-500 truncate max-w-62.5">Origem: {piece.lot?.sourceName}</span>
                           {piece.observations && (
                             <span className="text-[11px] text-amber-600 flex items-center gap-1 font-medium bg-amber-50 px-1.5 py-0.5 rounded w-fit mt-0.5">
                               <AlertCircle className="w-3 h-3 shrink-0" /> {piece.observations}

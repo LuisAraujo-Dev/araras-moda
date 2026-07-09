@@ -1,4 +1,3 @@
-//src/app/actions/piece.actions.ts
 "use server";
 
 import { prisma } from "@/lib/prisma";
@@ -40,7 +39,15 @@ export async function getPiecesAction(companyId: string) {
     const realId = await getRealCompanyId(companyId);
     return await prisma.piece.findMany({
       where: { companyId: realId },
-      include: { category: true, brand: true, lot: true, size: true, color: true, store: true },
+      include: { 
+        category: true, 
+        brand: true, 
+        lot: true, 
+        size: true, 
+        color: true, 
+        store: true,
+        images: true // Importante para carregar as fotos salvas
+      },
       orderBy: { createdAt: "desc" },
     });
   } catch (error) {
@@ -82,6 +89,7 @@ type CreatePieceInput = {
   name: string; categoryId: string; brandId: string; sizeId: string; colorId: string;
   tags: string[]; observations: string; lotId: string; storeId: string | null; purchasePrice: number;
   registerSale?: boolean; salePrice?: number;
+  imageUrl?: string; // Novo campo para receber a URL do Vercel Blob
 };
 
 export async function createPieceAction(companyId: string, data: CreatePieceInput) {
@@ -89,7 +97,7 @@ export async function createPieceAction(companyId: string, data: CreatePieceInpu
     const realId = await getRealCompanyId(companyId);
     const autoCode = `AM-${Math.floor(100000 + Math.random() * 900000)}`;
 
-    await prisma.piece.create({
+    const newPiece = await prisma.piece.create({
       data: {
         code: autoCode, qrCode: `QR-${autoCode}`, name: data.name, categoryId: data.categoryId, brandId: data.brandId,
         sizeId: data.sizeId, colorId: data.colorId, tags: data.tags, observations: data.observations,
@@ -97,6 +105,17 @@ export async function createPieceAction(companyId: string, data: CreatePieceInpu
         estimatedSalePrice: 0, status: data.tags.includes("Vendida") ? "VENDIDA" : "ESTOQUE", companyId: realId,
       },
     });
+
+    // Se a imagem foi recebida, salvamos no banco atrelada a esta nova peça
+    if (data.imageUrl) {
+      await prisma.pieceImage.create({
+        data: {
+          pieceId: newPiece.id,
+          imageUrl: data.imageUrl,
+          order: 0
+        }
+      });
+    }
 
     if (data.registerSale && data.salePrice) {
       await prisma.revenue.create({
@@ -124,6 +143,22 @@ export async function updatePieceAction(pieceId: string, companyId: string, data
         status: data.tags.includes("Vendida") ? "VENDIDA" : (data.storeId ? "CONSIGNADA" : "ESTOQUE")
       },
     });
+
+    // Se uma nova imagem foi enviada durante a edição
+    if (data.imageUrl) {
+      // Deletamos imagens antigas para garantir que só fica a nova
+      await prisma.pieceImage.deleteMany({
+        where: { pieceId: pieceId }
+      });
+      // Criamos a nova referência
+      await prisma.pieceImage.create({
+        data: {
+          pieceId: pieceId,
+          imageUrl: data.imageUrl,
+          order: 0
+        }
+      });
+    }
 
     if (data.registerSale && data.salePrice) {
       await prisma.revenue.create({
