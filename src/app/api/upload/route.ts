@@ -3,15 +3,27 @@ import { NextResponse } from 'next/server';
 
 export async function POST(request: Request): Promise<NextResponse> {
   const { searchParams } = new URL(request.url);
-  const filename = searchParams.get('filename');
+  const filename = searchParams.get('filename') || `upload-${Date.now()}.jpg`;
 
-  if (!filename) {
-    return NextResponse.json({ error: 'Nome de ficheiro obrigatório' }, { status: 400 });
+  if (!request.body) {
+    return NextResponse.json(
+      { error: 'Corpo da requisição vazio' },
+      { status: 400 }
+    );
   }
 
-  const blob = await put(filename, request.body as ReadableStream, {
-    access: 'public',
-  });
+  try {
+    const blob = await put(filename, request.body, {
+      multipart: true,
+      access: 'public',
+    });
 
-  return NextResponse.json(blob);
+    return NextResponse.json(blob);
+  } catch (error) {
+    console.error("Erro no Vercel Blob Upload:", error);
+    return NextResponse.json(
+      { error: 'Erro no processamento da imagem.' },
+      { status: 500 }
+    );
+  }
 }

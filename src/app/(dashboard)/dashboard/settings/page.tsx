@@ -31,7 +31,6 @@ export default function SettingsPage() {
   
   const [banner, setBanner] = useState({ show: false, message: "", type: "" });
 
-  // Estados para a Zona de Perigo
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
   const [loadingDelete, setLoadingDelete] = useState(false);
@@ -146,7 +145,6 @@ export default function SettingsPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         
-        {/* Cartão de Perfil */}
         <div className="bg-white rounded-xl border border-zinc-200 shadow-sm overflow-hidden flex flex-col">
           <div className="p-5 border-b border-zinc-200 bg-zinc-50/50 flex items-center gap-3">
             <User className="w-5 h-5 text-[#1E5AA8]" />
@@ -193,7 +191,6 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Cartão da Empresa */}
         <div className="bg-white rounded-xl border border-zinc-200 shadow-sm overflow-hidden flex flex-col">
           <div className="p-5 border-b border-zinc-200 bg-zinc-50/50 flex items-center gap-3">
             <Building2 className="w-5 h-5 text-[#1E5AA8]" />
@@ -230,7 +227,6 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Zona de Perigo (Exclusão) */}
       <div className="bg-rose-50 rounded-xl border border-rose-200 shadow-sm overflow-hidden mt-8">
         <div className="p-6 border-b border-rose-200 flex items-center gap-3">
           <div className="p-2 bg-rose-100 rounded-lg">
@@ -251,10 +247,8 @@ export default function SettingsPage() {
           </div>
           
           <Dialog open={deleteOpen} onOpenChange={(val) => { setDeleteOpen(val); setConfirmText(""); }}>
-            <DialogTrigger asChild>
-              <Button variant="destructive" className="shrink-0 bg-rose-600 hover:bg-rose-700 cursor-pointer h-11 px-6">
-                <Trash2 className="w-4 h-4 mr-2" /> Excluir a minha conta
-              </Button>
+            <DialogTrigger className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 shrink-0 bg-rose-600 hover:bg-rose-700 text-white cursor-pointer h-11 px-6 shadow-sm">
+              <Trash2 className="w-4 h-4 mr-2" /> Excluir a minha conta
             </DialogTrigger>
             <DialogContent className="sm:max-w-md rounded-xl">
               <DialogHeader>
