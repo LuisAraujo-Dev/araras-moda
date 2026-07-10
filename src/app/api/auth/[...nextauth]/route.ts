@@ -16,7 +16,7 @@ export const authOptions: NextAuthOptions = {
           emailVerified: data.emailVerified,
           company: {
             create: {
-              name: "Minha Operação",
+              name: "Pendente", // <-- A MUDANÇA ESTÁ AQUI
             },
           },
         },
