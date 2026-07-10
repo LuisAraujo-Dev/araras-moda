@@ -13,7 +13,6 @@ async function getRealCompanyId(providedId: string) {
 export async function seedTaxonomyAction(companyId: string) {
   try {
     const realId = await getRealCompanyId(companyId);
-
     const existingCat = await prisma.category.findFirst({ where: { companyId: realId } });
     if (existingCat) return { success: true };
 
@@ -28,8 +27,7 @@ export async function seedTaxonomyAction(companyId: string) {
 
     revalidatePath("/dashboard/inventory");
     return { success: true };
-  } catch (error) {
-    console.error(error);
+  } catch {
     return { error: "Falha ao gerar dados de taxonomia." };
   }
 }
@@ -46,12 +44,11 @@ export async function getPiecesAction(companyId: string) {
         size: true, 
         color: true, 
         store: true,
-        images: true // Importante para carregar as fotos salvas
+        images: true
       },
       orderBy: { createdAt: "desc" },
     });
-  } catch (error) {
-    console.error(error);
+  } catch {
     return [];
   }
 }
@@ -68,8 +65,7 @@ export async function getTaxonomyAction(companyId: string) {
       prisma.store.findMany({ where: { companyId: realId }, take: 15, orderBy: { name: 'asc' } }),
     ]);
     return { categories, brands, lots, sizes, colors, stores };
-  } catch (error) {
-    console.error(error);
+  } catch {
     return { categories: [], brands: [], lots: [], sizes: [], colors: [], stores: [] };
   }
 }
@@ -89,7 +85,7 @@ type CreatePieceInput = {
   name: string; categoryId: string; brandId: string; sizeId: string; colorId: string;
   tags: string[]; observations: string; lotId: string; storeId: string | null; purchasePrice: number;
   registerSale?: boolean; salePrice?: number;
-  imageUrl?: string; // Novo campo para receber a URL do Vercel Blob
+  imageUrl?: string;
 };
 
 export async function createPieceAction(companyId: string, data: CreatePieceInput) {
@@ -106,7 +102,6 @@ export async function createPieceAction(companyId: string, data: CreatePieceInpu
       },
     });
 
-    // Se a imagem foi recebida, salvamos no banco atrelada a esta nova peça
     if (data.imageUrl) {
       await prisma.pieceImage.create({
         data: {
@@ -124,8 +119,7 @@ export async function createPieceAction(companyId: string, data: CreatePieceInpu
     }
     revalidatePath("/dashboard/inventory");
     return { success: true };
-  } catch (error) {
-    console.error(error);
+  } catch {
     return { error: "Falha ao cadastrar a peça." };
   }
 }
@@ -144,13 +138,10 @@ export async function updatePieceAction(pieceId: string, companyId: string, data
       },
     });
 
-    // Se uma nova imagem foi enviada durante a edição
     if (data.imageUrl) {
-      // Deletamos imagens antigas para garantir que só fica a nova
       await prisma.pieceImage.deleteMany({
         where: { pieceId: pieceId }
       });
-      // Criamos a nova referência
       await prisma.pieceImage.create({
         data: {
           pieceId: pieceId,
@@ -167,8 +158,7 @@ export async function updatePieceAction(pieceId: string, companyId: string, data
     }
     revalidatePath("/dashboard/inventory");
     return { success: true };
-  } catch (error) {
-    console.error(error);
+  } catch {
     return { error: "Falha ao atualizar a peça." };
   }
 }
@@ -178,8 +168,7 @@ export async function deletePieceAction(pieceId: string, companyId: string) {
     await prisma.piece.delete({ where: { id: pieceId, companyId: await getRealCompanyId(companyId) } });
     revalidatePath("/dashboard/inventory");
     return { success: true };
-  } catch (error) {
-    console.error(error);
+  } catch {
     return { error: "Falha ao excluir a peça." };
   }
 }
