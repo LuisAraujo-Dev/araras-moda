@@ -1,21 +1,42 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { revalidatePath } from "next/cache";
 import { SourceType } from "@prisma/client";
-
-async function getRealCompanyId(providedId: string) {
-  if (providedId !== "company-placeholder-id") return providedId;
-  const company = await prisma.company.findFirst();
-  return company?.id || providedId;
-}
+import { revalidatePath } from "next/cache";
 
 export async function getLotsAction(companyId: string) {
   try {
-    const realId = await getRealCompanyId(companyId);
-    return await prisma.lot.findMany({
-      where: { companyId: realId },
-      orderBy: { purchaseDate: "desc" },
+    const lots = await prisma.lot.findMany({
+      where: { companyId },
+      include: {
+        pieces: true
+      },
+      orderBy: { purchaseDate: 'desc' }
+    });
+
+    return lots.map(lot => {
+      const { pieces, ...lotData } = lot;
+      
+      const registeredPieces = pieces.length;
+      
+      const soldPieces = pieces.filter(p => p.status === "VENDIDA").length;
+      
+      const expectedRevenue = pieces.reduce((acc, p) => {
+        return acc + (p.promoPrice || p.estimatedSalePrice || 0);
+      }, 0);
+
+      const averageCost = lotData.quantity > 0 ? lotData.totalCost / lotData.quantity : 0;
+      
+      const expectedProfit = expectedRevenue - lotData.totalCost;
+      
+      return {
+        ...lotData,
+        registeredPieces,
+        soldPieces,
+        expectedRevenue,
+        averageCost,
+        expectedProfit
+      };
     });
   } catch (error) {
     console.error(error);
@@ -35,78 +56,49 @@ type CreateLotInput = {
 
 export async function createLotAction(companyId: string, data: CreateLotInput) {
   try {
-    const realId = await getRealCompanyId(companyId);
+    const autoCode = data.code || `LOTE-${new Date().getTime().toString().slice(-6)}`;
     
-    const finalCode = data.code.trim() !== "" 
-      ? data.code 
-      : `AQ-${Math.floor(100000 + Math.random() * 900000)}`;
-
     await prisma.lot.create({
-      data: {
-        code: finalCode,
-        purchaseDate: data.purchaseDate,
-        sourceName: data.sourceName,
-        sourceType: data.sourceType,
-        totalCost: data.totalCost,
-        quantity: data.quantity,
-        notes: data.notes,
-        companyId: realId,
-      },
+      data: { ...data, code: autoCode, companyId }
     });
-
-    if (data.totalCost > 0) {
-      await prisma.expense.create({
-        data: { 
-          amount: data.totalCost, 
-          category: "Compra de Lote", 
-          description: `Aquisição de Lote: ${data.sourceName}`, 
-          date: data.purchaseDate, 
-          companyId: realId 
-        }
-      });
-    }
-
+    
     revalidatePath("/dashboard/lots");
     return { success: true };
-  } catch (error) {
-    console.error(error);
-    return { error: "Falha ao cadastrar a aquisição." };
+  } catch {
+    return { success: false, error: "Falha ao criar o lote." };
   }
 }
 
-export async function updateLotAction(lotId: string, companyId: string, data: CreateLotInput) {
+export async function updateLotAction(id: string, companyId: string, data: CreateLotInput) {
   try {
-    const realId = await getRealCompanyId(companyId);
     await prisma.lot.update({
-      where: { id: lotId, companyId: realId },
-      data: {
-        code: data.code,
-        purchaseDate: data.purchaseDate,
-        sourceName: data.sourceName,
-        sourceType: data.sourceType,
-        totalCost: data.totalCost,
-        quantity: data.quantity,
-        notes: data.notes,
-      },
+      where: { id, companyId },
+      data
     });
+    
     revalidatePath("/dashboard/lots");
     return { success: true };
-  } catch (error) {
-    console.error(error);
-    return { error: "Falha ao atualizar a aquisição." };
+  } catch {
+    return { success: false, error: "Falha ao atualizar." };
   }
 }
 
-export async function deleteLotAction(lotId: string, companyId: string) {
+export async function deleteLotAction(id: string, companyId: string) {
   try {
-    const realId = await getRealCompanyId(companyId);
-    await prisma.lot.delete({
-      where: { id: lotId, companyId: realId },
+    const lot = await prisma.lot.findUnique({ 
+      where: { id, companyId }, 
+      include: { _count: { select: { pieces: true } } } 
     });
+    
+    if (lot && lot._count.pieces > 0) {
+      return { success: false, error: "Não é possível excluir: existem peças no estoque vinculadas." };
+    }
+    
+    await prisma.lot.delete({ where: { id, companyId } });
+    
     revalidatePath("/dashboard/lots");
     return { success: true };
-  } catch (error) {
-    console.error(error);
-    return { error: "Falha ao excluir a aquisição. Verifique se existem peças vinculadas a ela." };
+  } catch {
+    return { success: false, error: "Falha ao excluir." };
   }
 }

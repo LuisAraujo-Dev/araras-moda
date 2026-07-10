@@ -6,37 +6,44 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Layers, PlusCircle, CheckCircle2, AlertCircle, Pencil, Trash2, MapPin, Loader2, Calendar, Package } from "lucide-react";
+import { Layers, PlusCircle, CheckCircle2, AlertCircle, Pencil, Trash2, MapPin, Loader2, Package, TrendingUp } from "lucide-react";
 import { getLotsAction, createLotAction, updateLotAction, deleteLotAction } from "@/app/actions/lot.actions";
 import { checkOnboardingStatusAction } from "@/app/actions/setup.actions";
 import { Lot, SourceType } from "@prisma/client";
 
 const SOURCE_TYPES = Object.values(SourceType);
 
+type EnrichedLot = Lot & {
+  registeredPieces: number;
+  soldPieces: number;
+  expectedRevenue: number;
+  averageCost: number;
+  expectedProfit: number;
+};
+
 export default function AcquisitionsPage() {
   const [companyId, setCompanyId] = useState<string>("");
-  const [lots, setLots] = useState<Lot[]>([]);
+  const [lots, setLots] = useState<EnrichedLot[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [banner, setBanner] = useState({ show: false, message: "", type: "" });
 
-  const [editingLot, setEditingLot] = useState<Lot | null>(null);
+  const [editingLot, setEditingLot] = useState<EnrichedLot | null>(null);
   const [lotToDelete, setLotToDelete] = useState<string | null>(null);
 
   const loadData = async (cid: string) => {
     const data = await getLotsAction(cid);
-    setLots(data as Lot[]);
+    setLots(data as EnrichedLot[]);
   };
 
   useEffect(() => {
     let isMounted = true;
     const fetchInitialData = async () => {
       const status = await checkOnboardingStatusAction();
-
       if (status.success && status.companyId) {
         if (isMounted) setCompanyId(status.companyId);
         const data = await getLotsAction(status.companyId);
-        if (isMounted) setLots(data as Lot[]);
+        if (isMounted) setLots(data as EnrichedLot[]);
       }
     };
     fetchInitialData();
@@ -48,7 +55,7 @@ export default function AcquisitionsPage() {
     setTimeout(() => setBanner({ show: false, message: "", type: "" }), 5000);
   };
 
-  const handleEditClick = (lot: Lot) => {
+  const handleEditClick = (lot: EnrichedLot) => {
     setEditingLot(lot);
     setOpen(true);
   };
@@ -61,12 +68,12 @@ export default function AcquisitionsPage() {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!companyId) return;
-
+    
     setLoading(true);
 
     const formData = new FormData(event.currentTarget);
     const dateValue = formData.get("purchaseDate") as string;
-
+    
     const data = {
       code: formData.get("code") as string,
       purchaseDate: dateValue ? new Date(dateValue) : new Date(),
@@ -83,15 +90,15 @@ export default function AcquisitionsPage() {
     } else {
       result = await createLotAction(companyId, data);
     }
-
+    
     setLoading(false);
 
     if (result.success) {
       handleCloseModal(false);
-      showBanner(editingLot ? "Aquisição atualizada com sucesso!" : "Aquisição cadastrada com sucesso!", "success");
+      showBanner(editingLot ? "Origem atualizada!" : "Garimpo cadastrado com sucesso!", "success");
       await loadData(companyId);
     } else {
-      showBanner(result.error || "Erro ao guardar a aquisição.", "error");
+      showBanner(result.error || "Erro ao guardar.", "error");
     }
   }
 
@@ -100,10 +107,9 @@ export default function AcquisitionsPage() {
     setLoading(true);
     const result = await deleteLotAction(lotToDelete, companyId);
     setLoading(false);
-
+    
     if (result.success) {
-      showBanner("Aquisição excluída com sucesso!", "success");
-      setLotToDelete(null);
+      showBanner("Excluída com sucesso!", "success");
       await loadData(companyId);
     } else {
       showBanner(result.error || "Erro ao excluir.", "error");
@@ -115,7 +121,6 @@ export default function AcquisitionsPage() {
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
 
   const formatDate = (date: Date) => {
-    // Trata problemas de fuso horário ao exibir apenas a data
     const d = new Date(date);
     return new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(d);
   };
@@ -125,7 +130,7 @@ export default function AcquisitionsPage() {
       <div className="flex h-[60vh] items-center justify-center">
         <div className="flex flex-col items-center text-zinc-500">
           <Layers className="w-8 h-8 animate-pulse mb-2 text-[#1E5AA8]" />
-          <p>A carregar os seus lotes e compras...</p>
+          <p>A carregar inteligência dos seus lotes...</p>
         </div>
       </div>
     );
@@ -142,31 +147,31 @@ export default function AcquisitionsPage() {
 
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-2">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-[#0A244A]">Aquisições & Lotes</h1>
-          <p className="text-[#4B4B4B] mt-1 text-sm md:text-base">Gere compras, garimpos e origens das suas peças.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-[#0A244A]">Garimpos & Lotes</h1>
+          <p className="text-[#4B4B4B] mt-1 text-sm md:text-base">Gere o ROI das suas idas ao brechó e compras em atacado.</p>
         </div>
 
         <div className="flex items-center w-full sm:w-auto">
           <Dialog open={open} onOpenChange={handleCloseModal}>
             <DialogTrigger className="flex flex-1 sm:flex-none items-center justify-center gap-2 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white transition-colors shadow-sm h-10 px-4 rounded-md text-sm font-medium">
-              <PlusCircle className="w-4 h-4" /> Cadastrar Origem
+              <PlusCircle className="w-4 h-4" /> Nova Ida ao Brechó
             </DialogTrigger>
             <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 rounded-xl">
               <DialogHeader>
-                <DialogTitle className="text-[#0A244A]">{editingLot ? "Editar Origem" : "Cadastrar Nova Origem"}</DialogTitle>
+                <DialogTitle className="text-[#0A244A]">{editingLot ? "Editar Garimpo" : "Cadastrar Nova Ida ao Brechó"}</DialogTitle>
                 <DialogDescription className="text-[#4B4B4B] text-xs sm:text-sm">
-                  Preencha os dados do local onde as peças foram compradas ou recebidas.
+                  Quanto gastou na sacola fechada? O sistema calculará o valor médio de cada peça.
                 </DialogDescription>
               </DialogHeader>
 
               <form key={editingLot?.id || "new"} onSubmit={handleSubmit} className="space-y-5 pt-2">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <Label htmlFor="sourceName" className="text-[#0A244A]">Fornecedor / Local</Label>
-                    <Input id="sourceName" name="sourceName" placeholder="Ex: Bazar Beneficente" defaultValue={editingLot?.sourceName || ""} required autoFocus className="h-10" />
+                    <Label htmlFor="sourceName" className="text-[#0A244A]">Onde você foi?</Label>
+                    <Input id="sourceName" name="sourceName" placeholder="Ex: Brechó da Maria" defaultValue={editingLot?.sourceName || ""} required autoFocus className="h-10" />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="sourceType" className="text-[#0A244A]">Tipo de Origem</Label>
+                    <Label htmlFor="sourceType" className="text-[#0A244A]">Tipo</Label>
                     <select id="sourceType" name="sourceType" defaultValue={editingLot?.sourceType || ""} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm focus:border-[#1E5AA8] focus:ring-1 focus:ring-[#1E5AA8] outline-none" required>
                       <option value="">Selecione...</option>
                       {SOURCE_TYPES.map(type => (
@@ -182,30 +187,30 @@ export default function AcquisitionsPage() {
                     <Input id="code" name="code" placeholder="Gerado auto se vazio" defaultValue={editingLot?.code || ""} className="h-10" />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="purchaseDate" className="text-[#0A244A]">Data da Aquisição</Label>
+                    <Label htmlFor="purchaseDate" className="text-[#0A244A]">Quando foi?</Label>
                     <Input id="purchaseDate" name="purchaseDate" type="date" defaultValue={editingLot ? new Date(editingLot.purchaseDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]} required className="h-10" />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-zinc-50 p-4 border border-zinc-200 rounded-lg">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-[#1E5AA8]/5 p-4 border border-[#1E5AA8]/20 rounded-lg">
                   <div className="space-y-1">
-                    <Label htmlFor="quantity" className="text-[#0A244A] font-bold">Quantidade de Peças</Label>
-                    <Input id="quantity" name="quantity" type="number" min="1" placeholder="Ex: 50" defaultValue={editingLot?.quantity || ""} required className="h-10" />
+                    <Label htmlFor="quantity" className="text-[#0A244A] font-bold">Quantas peças trouxe?</Label>
+                    <Input id="quantity" name="quantity" type="number" min="1" placeholder="Ex: 50" defaultValue={editingLot?.quantity || ""} required className="h-10 bg-white" />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="totalCost" className="text-[#0A244A] font-bold">Custo Total (R$)</Label>
-                    <Input id="totalCost" name="totalCost" type="number" step="0.01" min="0" placeholder="Ex: 250.00" defaultValue={editingLot?.totalCost || ""} required className="h-10" />
+                    <Label htmlFor="totalCost" className="text-[#0A244A] font-bold">Quanto pagou em tudo? (R$)</Label>
+                    <Input id="totalCost" name="totalCost" type="number" step="0.01" min="0" placeholder="Ex: 250.00" defaultValue={editingLot?.totalCost || ""} required className="h-10 bg-white" />
                   </div>
                 </div>
 
                 <div className="space-y-1">
                   <Label htmlFor="notes" className="text-[#0A244A]">Observações (Opcional)</Label>
-                  <Input id="notes" name="notes" placeholder="Ex: Roupas de inverno para triagem..." defaultValue={editingLot?.notes || ""} className="h-10" />
+                  <Input id="notes" name="notes" placeholder="Ex: Foco em roupas de inverno..." defaultValue={editingLot?.notes || ""} className="h-10" />
                 </div>
 
                 <Button type="submit" className="w-full mt-2 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white h-12 text-base shadow-sm font-medium flex items-center justify-center gap-2" disabled={loading}>
                   {loading && <Loader2 className="w-5 h-5 animate-spin" />}
-                  {loading ? "A processar..." : (editingLot ? "Salvar Alterações" : "Guardar Origem")}
+                  {loading ? "A processar..." : (editingLot ? "Salvar Alterações" : "Salvar Ida ao Brechó")}
                 </Button>
               </form>
             </DialogContent>
@@ -218,7 +223,7 @@ export default function AcquisitionsPage() {
                   <AlertCircle className="w-5 h-5" /> Confirmar Exclusão
                 </DialogTitle>
                 <DialogDescription className="text-zinc-600 mt-3 text-sm md:text-base">
-                  Tem certeza que deseja excluir esta aquisição? Se existirem peças vinculadas a ela no estoque, a exclusão será bloqueada.
+                  Tem certeza que deseja excluir? Se existirem peças vinculadas a esta ida ao brechó no estoque, a exclusão será bloqueada.
                 </DialogDescription>
               </DialogHeader>
               <div className="flex gap-3 mt-4">
@@ -236,113 +241,150 @@ export default function AcquisitionsPage() {
         {lots.length === 0 ? (
           <div className="p-12 md:p-16 text-center flex flex-col items-center justify-center">
             <Layers className="w-12 h-12 text-[#1E5AA8]/30 mb-4" />
-            <h3 className="text-lg font-semibold text-[#0A244A]">Nenhuma origem cadastrada</h3>
+            <h3 className="text-lg font-semibold text-[#0A244A]">Nenhum garimpo registado</h3>
             <p className="text-sm text-[#4B4B4B] max-w-sm mt-1">
-              Comece cadastrando as suas compras ou garimpos para poder vincular as peças ao estoque.
+              Sempre que voltar do brechó com uma sacola, registe aqui para descobrir o seu custo médio e lucros!
             </p>
           </div>
         ) : (
           <>
-            {/* VISTA MOBILE: Cartões (Cards) */}
+            {/* VISTA MOBILE: Cartões Inteligentes */}
             <div className="md:hidden flex flex-col divide-y divide-zinc-100">
-              {lots.map((lot) => (
-                <div key={lot.id} className="p-4 flex flex-col gap-3 hover:bg-zinc-50 transition-colors">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="font-semibold text-[#0A244A] text-sm leading-tight">{lot.sourceName}</h3>
-                      <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                        <span className="text-[10px] text-zinc-500 font-medium bg-zinc-100 px-1.5 py-0.5 rounded">LOTE: {lot.code}</span>
-                        <span className="text-[10px] text-zinc-500 flex items-center gap-1 bg-zinc-50 border border-zinc-200 px-1.5 py-0.5 rounded-sm">
-                          <MapPin className="w-3 h-3" /> {lot.sourceType.replace(/_/g, ' ')}
-                        </span>
+              {lots.map((lot) => {
+                const percent = Math.min((lot.registeredPieces / lot.quantity) * 100, 100);
+                
+                return (
+                  <div key={lot.id} className="p-4 flex flex-col gap-3 hover:bg-zinc-50 transition-colors">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="font-semibold text-[#0A244A] text-sm leading-tight">{lot.sourceName}</h3>
+                        <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                          <span className="text-[10px] text-zinc-500 font-medium bg-zinc-100 px-1.5 py-0.5 rounded">{formatDate(lot.purchaseDate)}</span>
+                          <span className="text-[10px] text-zinc-500 flex items-center gap-1 bg-zinc-50 border border-zinc-200 px-1.5 py-0.5 rounded-sm">
+                            <MapPin className="w-3 h-3" /> {lot.sourceType.replace(/_/g, ' ')}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex gap-1.5 shrink-0">
+                        <button onClick={() => handleEditClick(lot)} className="p-2 text-blue-600 bg-blue-50 border border-blue-100 rounded-md transition-colors cursor-pointer">
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => setLotToDelete(lot.id)} className="p-2 text-rose-600 bg-rose-50 border border-rose-100 rounded-md transition-colors cursor-pointer">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
-                    <div className="flex gap-1.5 shrink-0">
-                      <button onClick={() => handleEditClick(lot)} className="p-2 text-blue-600 bg-blue-50 border border-blue-100 rounded-md transition-colors cursor-pointer" title="Editar">
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                      <button onClick={() => setLotToDelete(lot.id)} className="p-2 text-rose-600 bg-rose-50 border border-rose-100 rounded-md transition-colors cursor-pointer" title="Excluir">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
 
-                  <div className="grid grid-cols-3 gap-2 mt-1 pt-3 border-t border-zinc-100">
-                    <div>
-                      <span className="flex text-[10px] uppercase text-zinc-500 font-semibold items-center gap-1 mb-0.5"><Calendar className="w-3 h-3" /> Data</span>                      <span className="font-medium text-[#4B4B4B] text-xs">{formatDate(lot.purchaseDate)}</span>
+                    {/* Dashboard Miniatura */}
+                    <div className="mt-1 bg-zinc-50 border border-zinc-200 rounded-lg p-3 shadow-sm">
+                      <div className="flex justify-between items-center mb-1.5">
+                        <span className="text-[10px] uppercase font-bold text-zinc-500 flex items-center gap-1">
+                          <Package className="w-3 h-3"/> Triagem das Peças
+                        </span>
+                        <span className="text-[10px] font-bold text-[#0A244A]">{lot.registeredPieces} de {lot.quantity} cadastradas</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-zinc-200 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${percent === 100 ? 'bg-emerald-500' : 'bg-[#1E5AA8]'}`} style={{ width: `${percent}%` }} />
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-zinc-100">
+                         <div>
+                            <span className="flex text-[9px] uppercase text-zinc-500 font-semibold items-center gap-1 mb-0.5">Valor Pago</span>
+                            <p className="font-bold text-[#0A244A] text-xs">{formatCurrency(lot.totalCost)}</p>
+                            <p className="text-[9px] text-rose-600 font-medium mt-0.5">{formatCurrency(lot.averageCost)} /peça</p>
+                         </div>
+                         <div className="text-right">
+                            <span className="flex justify-end text-[9px] uppercase text-zinc-500 font-semibold items-center gap-1 mb-0.5">
+                              Lucro Previsto <TrendingUp className="w-3 h-3 text-emerald-500"/>
+                            </span>
+                            <p className={`font-bold text-xs ${lot.expectedProfit > 0 ? 'text-emerald-600' : 'text-zinc-500'}`}>
+                              {formatCurrency(lot.expectedProfit)}
+                            </p>
+                            <p className="text-[9px] text-zinc-500 mt-0.5">Estimativa: {formatCurrency(lot.expectedRevenue)}</p>
+                         </div>
+                      </div>
                     </div>
-                    <div>
-                      <span className="flex text-[10px] uppercase text-zinc-500 font-semibold items-center gap-1 mb-0.5"><Package className="w-3 h-3" /> Peças</span>                      <span className="font-medium text-[#4B4B4B] text-xs">{lot.quantity} unid.</span>
-                    </div>
-                    <div className="text-right">
-                      <span className="block text-[10px] uppercase text-zinc-500 font-semibold mb-0.5">Custo Total</span>
-                      <span className="font-bold text-[#1E5AA8] text-sm">{formatCurrency(lot.totalCost)}</span>
-                    </div>
-                  </div>
 
-                  {lot.notes && (
-                    <div className="mt-1 bg-amber-50 px-2 py-1.5 rounded-md text-xs text-amber-700 flex items-start gap-1.5 border border-amber-100">
-                      <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                      <span className="leading-tight">{lot.notes}</span>
-                    </div>
-                  )}
-                </div>
-              ))}
+                    {lot.notes && (
+                      <div className="mt-1 bg-amber-50 px-2 py-1.5 rounded-md text-xs text-amber-700 flex items-start gap-1.5 border border-amber-100">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                        <span className="leading-tight">{lot.notes}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
-            {/* VISTA DESKTOP: Tabela Tradicional */}
+            {/* VISTA DESKTOP: Tabela Inteligente */}
             <div className="hidden md:block overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
-                    <TableHead className="w-32 font-semibold">Código Lote</TableHead>
-                    <TableHead className="font-semibold">Origem / Fornecedor</TableHead>
-                    <TableHead className="font-semibold">Data</TableHead>
-                    <TableHead className="text-center font-semibold">Qtd Peças</TableHead>
+                    <TableHead className="font-semibold">Origem / Data</TableHead>
+                    <TableHead className="font-semibold w-48">Progresso do Garimpo</TableHead>
                     <TableHead className="text-right font-semibold">Custo Total</TableHead>
-                    <TableHead className="text-right w-28 font-semibold">Ações</TableHead>
+                    <TableHead className="text-right font-semibold">Custo/Peça</TableHead>
+                    <TableHead className="text-right font-semibold">Faturamento Prev.</TableHead>
+                    <TableHead className="text-right font-semibold">Lucro Potencial</TableHead>
+                    <TableHead className="text-right w-24 font-semibold">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {lots.map((lot) => (
-                    <TableRow key={lot.id} className="hover:bg-zinc-50/80 transition-colors">
-                      <TableCell className="font-medium text-[#4B4B4B] text-xs">
-                        <span className="bg-zinc-100 px-1.5 py-0.5 rounded">{lot.code}</span>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span className="font-semibold text-[#0A244A]">{lot.sourceName}</span>
-                          <span className="text-[11px] text-zinc-500 flex items-center gap-1 mt-0.5 uppercase tracking-wider">
-                            <MapPin className="w-3 h-3" /> {lot.sourceType.replace(/_/g, ' ')}
-                          </span>
-                          {lot.notes && (
-                            <span className="text-[11px] text-amber-600 flex items-center gap-1 font-medium bg-amber-50 px-1.5 py-0.5 rounded w-fit mt-1">
-                              <AlertCircle className="w-3 h-3 shrink-0" /> {lot.notes}
+                  {lots.map((lot) => {
+                    const percent = Math.min((lot.registeredPieces / lot.quantity) * 100, 100);
+
+                    return (
+                      <TableRow key={lot.id} className="hover:bg-zinc-50/80 transition-colors">
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-[#0A244A]">{lot.sourceName}</span>
+                            <span className="text-[11px] text-zinc-500 mt-0.5">
+                              {formatDate(lot.purchaseDate)} • {lot.code}
                             </span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-[#4B4B4B] text-sm font-medium">
-                        {formatDate(lot.purchaseDate)}
-                      </TableCell>
-                      <TableCell className="text-center font-bold text-[#4B4B4B]">
-                        {lot.quantity}
-                      </TableCell>
-                      <TableCell className="font-bold text-[#1E5AA8] text-right">
-                        {formatCurrency(lot.totalCost)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1.5">
-                          <button onClick={() => handleEditClick(lot)} className="p-2 text-zinc-400 hover:text-[#1E5AA8] hover:bg-blue-50 rounded-md transition-all cursor-pointer" title="Editar Aquisição">
-                            <Pencil className="w-4 h-4" />
-                          </button>
-                          <button onClick={() => setLotToDelete(lot.id)} className="p-2 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-all cursor-pointer" title="Excluir Aquisição">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                            {lot.notes && (
+                              <span className="text-[10px] text-amber-600 flex items-center gap-1 font-medium mt-1">
+                                <AlertCircle className="w-3 h-3 shrink-0" /> {lot.notes}
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-1.5">
+                            <div className="flex justify-between text-[11px] font-medium text-zinc-600">
+                              <span>{lot.registeredPieces} cadastradas</span>
+                              <span>{lot.quantity} total</span>
+                            </div>
+                            <div className="w-full h-1.5 bg-zinc-200 rounded-full overflow-hidden">
+                              <div className={`h-full rounded-full ${percent === 100 ? 'bg-emerald-500' : 'bg-[#1E5AA8]'}`} style={{ width: `${percent}%` }} />
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-bold text-[#0A244A] text-right">
+                          {formatCurrency(lot.totalCost)}
+                        </TableCell>
+                        <TableCell className="font-semibold text-rose-600 text-right">
+                          {formatCurrency(lot.averageCost)}
+                        </TableCell>
+                        <TableCell className="font-medium text-zinc-600 text-right">
+                          {formatCurrency(lot.expectedRevenue)}
+                        </TableCell>
+                        <TableCell className={`font-bold text-right ${lot.expectedProfit > 0 ? 'text-emerald-600' : 'text-zinc-500'}`}>
+                          {lot.expectedProfit > 0 && '+'}{formatCurrency(lot.expectedProfit)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1.5">
+                            <button onClick={() => handleEditClick(lot)} className="p-2 text-zinc-400 hover:text-[#1E5AA8] hover:bg-blue-50 rounded-md transition-all cursor-pointer">
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => setLotToDelete(lot.id)} className="p-2 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-all cursor-pointer">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
