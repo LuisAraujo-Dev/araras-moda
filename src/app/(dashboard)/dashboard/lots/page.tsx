@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Layers, PlusCircle, CheckCircle2, AlertCircle, Pencil, Trash2, MapPin, Loader2, Package, TrendingUp } from "lucide-react";
+import { Layers, PlusCircle, CheckCircle2, AlertCircle, Pencil, Trash2, MapPin, Loader2, Package, TrendingUp, Camera, Tag, ArrowLeft, Search, Check, ChevronDown } from "lucide-react";
 import { getLotsAction, createLotAction, updateLotAction, deleteLotAction } from "@/app/actions/lot.actions";
+import { getTaxonomyAction, createPieceAction, quickAddCategory, quickAddBrand, quickAddSize, quickAddColor, quickAddStore } from "@/app/actions/piece.actions";
 import { checkOnboardingStatusAction } from "@/app/actions/setup.actions";
-import { Lot, SourceType } from "@prisma/client";
+import { Lot, SourceType, Category, Brand, Size, Color, Store as StoreModel } from "@prisma/client";
 
 const SOURCE_TYPES = Object.values(SourceType);
 
@@ -21,9 +23,80 @@ type EnrichedLot = Lot & {
   expectedProfit: number;
 };
 
+type TaxonomyData = {
+  categories: Category[]; brands: Brand[]; lots: Lot[]; sizes: Size[]; colors: Color[]; stores: StoreModel[];
+};
+
+const TAG_COLORS: Record<string, string> = {
+  "Higienização": "bg-cyan-100 text-cyan-900 border-cyan-200",
+  "Conserto": "bg-amber-100 text-amber-900 border-amber-400",
+  "Em consignação": "bg-purple-100 text-purple-900 border-purple-400",
+  "Postada": "bg-blue-100 text-blue-900 border-blue-200",
+  "Em estoque": "bg-emerald-100 text-emerald-900 border-emerald-200",
+  "Para doação": "bg-teal-100 text-teal-900 border-teal-200",
+  "Doada": "bg-zinc-200 text-zinc-900 border-zinc-300",
+  "Vendida": "bg-lime-100 text-lime-900 border-lime-500",
+  "Descartada": "bg-rose-100 text-rose-900 border-rose-200",
+};
+
+const AVAILABLE_TAGS = Object.keys(TAG_COLORS);
+
+type SelectOption = { id: string; name?: string; sourceName?: string; code?: string; };
+
+function SearchableSelect({ value, onChange, options, placeholder, newItemLabel, onAddNew }: { value: string; onChange: (val: string) => void; options: SelectOption[]; placeholder: string; newItemLabel: string; onAddNew: () => void; }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const getText = (opt: SelectOption) => opt.name || (opt.sourceName ? `${opt.sourceName} (${opt.code})` : "");
+  const selectedItem = options.find((o) => o.id === value);
+  const displayText = selectedItem ? getText(selectedItem) : placeholder;
+
+  const filtered = options.filter((o) => getText(o).toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => {
+      const tA = getText(a).toLowerCase(); const tB = getText(b).toLowerCase(); const s = search.toLowerCase();
+      if (tA.startsWith(s) && !tB.startsWith(s)) return -1; if (!tA.startsWith(s) && tB.startsWith(s)) return 1; return 0;
+    });
+
+  return (
+    <div className="relative">
+      <input type="text" value={value} required tabIndex={-1} className="absolute opacity-0 w-0 h-0 pointer-events-none -z-10" onChange={() => {}} />
+      <div className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm flex items-center justify-between cursor-pointer focus-within:border-[#1E5AA8] transition-colors" onClick={() => setIsOpen(!isOpen)}>
+        <span className={`truncate ${selectedItem ? "text-zinc-900" : "text-zinc-500"}`}>{displayText}</span>
+        <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0" />
+      </div>
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-60" onClick={() => setIsOpen(false)}></div>
+          <div className="absolute z-70 mt-1 w-full bg-white border border-zinc-200 rounded-md shadow-xl max-h-64 flex flex-col overflow-hidden">
+            <div className="bg-white p-2 border-b border-zinc-100 shrink-0">
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-2 top-2 text-zinc-400" />
+                <input autoFocus type="text" className="w-full h-8 pl-8 pr-3 text-sm bg-zinc-50 border rounded focus:border-[#1E5AA8] outline-none" placeholder="Buscar..." value={search} onChange={e => setSearch(e.target.value)} />
+              </div>
+            </div>
+            <div className="p-1 overflow-y-auto custom-scrollbar">
+              {filtered.length === 0 ? <div className="px-3 py-4 text-sm text-zinc-500 text-center">Sem resultados</div> : filtered.map((opt) => (
+                   <div key={opt.id} className="px-3 py-2 text-sm hover:bg-zinc-100 rounded cursor-pointer flex justify-between" onClick={() => { onChange(opt.id); setIsOpen(false); setSearch(""); }}>
+                     <span className="truncate pr-2">{getText(opt)}</span>{value === opt.id && <Check className="w-4 h-4 text-[#1E5AA8] shrink-0" />}
+                   </div>
+                ))}
+              <div className="border-t border-zinc-100 my-1"></div>
+              <div className="px-3 py-2.5 text-sm font-bold text-[#1E5AA8] hover:bg-blue-50 rounded cursor-pointer flex items-center gap-2" onClick={() => { onAddNew(); setIsOpen(false); setSearch(""); }}>
+                <PlusCircle className="w-4 h-4 shrink-0" /> <span className="truncate">{newItemLabel}</span>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function AcquisitionsPage() {
   const [companyId, setCompanyId] = useState<string>("");
   const [lots, setLots] = useState<EnrichedLot[]>([]);
+  const [taxonomy, setTaxonomy] = useState<TaxonomyData>({ categories: [], brands: [], lots: [], sizes: [], colors: [], stores: [] });
+
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [banner, setBanner] = useState({ show: false, message: "", type: "" });
@@ -31,9 +104,28 @@ export default function AcquisitionsPage() {
   const [editingLot, setEditingLot] = useState<EnrichedLot | null>(null);
   const [lotToDelete, setLotToDelete] = useState<string | null>(null);
 
+  // Estados de Cadastro de Peças do Lote
+  const [openPieceForm, setOpenPieceForm] = useState(false);
+  const [targetLotForPiece, setTargetLotForPiece] = useState<EnrichedLot | null>(null);
+  const [catId, setCatId] = useState(""); 
+  const [brandId, setBrandId] = useState("");
+  const [sizeId, setSizeId] = useState(""); 
+  const [colorId, setColorId] = useState("");
+  const [storeId, setStoreId] = useState("");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [quickAdd, setQuickAdd] = useState({ isOpen: false, type: "", label: "" });
+  const [quickAddValue, setQuickAddValue] = useState("");
+
   const loadData = async (cid: string) => {
-    const data = await getLotsAction(cid);
-    setLots(data as EnrichedLot[]);
+    const [lData, tData] = await Promise.all([getLotsAction(cid), getTaxonomyAction(cid)]);
+    setLots(lData as EnrichedLot[]);
+    setTaxonomy(tData as TaxonomyData);
   };
 
   useEffect(() => {
@@ -42,8 +134,11 @@ export default function AcquisitionsPage() {
       const status = await checkOnboardingStatusAction();
       if (status.success && status.companyId) {
         if (isMounted) setCompanyId(status.companyId);
-        const data = await getLotsAction(status.companyId);
-        if (isMounted) setLots(data as EnrichedLot[]);
+        const [lData, tData] = await Promise.all([getLotsAction(status.companyId), getTaxonomyAction(status.companyId)]);
+        if (isMounted) {
+          setLots(lData as EnrichedLot[]);
+          setTaxonomy(tData as TaxonomyData);
+        }
       }
     };
     fetchInitialData();
@@ -55,42 +150,23 @@ export default function AcquisitionsPage() {
     setTimeout(() => setBanner({ show: false, message: "", type: "" }), 5000);
   };
 
-  const handleEditClick = (lot: EnrichedLot) => {
-    setEditingLot(lot);
-    setOpen(true);
-  };
+  // --- LÓGICA DOS LOTES ---
+  const handleEditClick = (lot: EnrichedLot) => { setEditingLot(lot); setOpen(true); };
+  const handleCloseModal = (val: boolean) => { setOpen(val); if (!val) setEditingLot(null); };
 
-  const handleCloseModal = (val: boolean) => {
-    setOpen(val);
-    if (!val) setEditingLot(null);
-  };
-
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!companyId) return;
-    
+  async function handleLotSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); if (!companyId) return;
     setLoading(true);
-
     const formData = new FormData(event.currentTarget);
     const dateValue = formData.get("purchaseDate") as string;
     
     const data = {
-      code: formData.get("code") as string,
-      purchaseDate: dateValue ? new Date(dateValue) : new Date(),
-      sourceName: formData.get("sourceName") as string,
-      sourceType: formData.get("sourceType") as SourceType,
-      totalCost: Number(formData.get("totalCost")),
-      quantity: Number(formData.get("quantity")),
-      notes: formData.get("notes") as string,
+      code: formData.get("code") as string, purchaseDate: dateValue ? new Date(dateValue) : new Date(),
+      sourceName: formData.get("sourceName") as string, sourceType: formData.get("sourceType") as SourceType,
+      totalCost: Number(formData.get("totalCost")), quantity: Number(formData.get("quantity")), notes: formData.get("notes") as string,
     };
 
-    let result;
-    if (editingLot) {
-      result = await updateLotAction(editingLot.id, companyId, data);
-    } else {
-      result = await createLotAction(companyId, data);
-    }
-    
+    const result = editingLot ? await updateLotAction(editingLot.id, companyId, data) : await createLotAction(companyId, data);
     setLoading(false);
 
     if (result.success) {
@@ -104,26 +180,92 @@ export default function AcquisitionsPage() {
 
   async function confirmDelete() {
     if (!lotToDelete || !companyId) return;
-    setLoading(true);
-    const result = await deleteLotAction(lotToDelete, companyId);
-    setLoading(false);
-    
-    if (result.success) {
-      showBanner("Excluída com sucesso!", "success");
-      await loadData(companyId);
-    } else {
-      showBanner(result.error || "Erro ao excluir.", "error");
-    }
+    setLoading(true); const result = await deleteLotAction(lotToDelete, companyId); setLoading(false);
+    if (result.success) { showBanner("Excluída com sucesso!", "success"); await loadData(companyId); }
+    else { showBanner(result.error || "Erro ao excluir.", "error"); }
     setLotToDelete(null);
   }
 
-  const formatCurrency = (val: number) =>
-    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
-
-  const formatDate = (date: Date) => {
-    const d = new Date(date);
-    return new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(d);
+  // --- LÓGICA DE CADASTRO DE PEÇAS ---
+  const openPieceEntry = (lot: EnrichedLot) => { setTargetLotForPiece(lot); setOpenPieceForm(true); };
+  const closePieceEntry = (val: boolean) => {
+    setOpenPieceForm(val);
+    if (!val) {
+      setCatId(""); setBrandId(""); setSizeId(""); setColorId(""); setStoreId(""); setSelectedTags([]);
+      setImageFile(null); setImagePreview(null); setTargetLotForPiece(null);
+    }
   };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0]; setImageFile(file); setImagePreview(URL.createObjectURL(file));
+    }
+  };
+
+  const toggleTag = (tag: string) => {
+    if (tag === "Vendida") setSelectedTags(prev => prev.includes("Vendida") ? [] : ["Vendida"]);
+    else setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag).filter(t => t !== "Vendida") : [...prev, tag].filter(t => t !== "Vendida"));
+  };
+
+  const triggerQuickAdd = (type: string, label: string) => { setQuickAdd({ isOpen: true, type, label }); setQuickAddValue(""); };
+
+  const handleSaveQuickAdd = async () => {
+    if (!quickAddValue || !companyId) return;
+    setLoading(true); let newRec;
+    if (quickAdd.type === 'category') newRec = await quickAddCategory(companyId, quickAddValue);
+    if (quickAdd.type === 'brand') newRec = await quickAddBrand(companyId, quickAddValue);
+    if (quickAdd.type === 'size') newRec = await quickAddSize(companyId, quickAddValue);
+    if (quickAdd.type === 'color') newRec = await quickAddColor(companyId, quickAddValue);
+    if (quickAdd.type === 'store') newRec = await quickAddStore(companyId, quickAddValue);
+    
+    await loadData(companyId); 
+    if (quickAdd.type === 'category' && newRec) setCatId(newRec.id);
+    if (quickAdd.type === 'brand' && newRec) setBrandId(newRec.id);
+    if (quickAdd.type === 'size' && newRec) setSizeId(newRec.id);
+    if (quickAdd.type === 'color' && newRec) setColorId(newRec.id);
+    if (quickAdd.type === 'store' && newRec) setStoreId(newRec.id);
+    setLoading(false); setQuickAdd({ isOpen: false, type: "", label: "" });
+  };
+
+  async function handlePieceSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); if (!companyId || !targetLotForPiece) return;
+    const formData = new FormData(event.currentTarget);
+    setLoading(true); let finalImg = imagePreview; 
+
+    if (imageFile) {
+      setIsUploading(true);
+      try {
+        const res = await fetch(`/api/upload?filename=${encodeURIComponent(imageFile.name)}`, { method: "POST", body: imageFile });
+        if (res.ok) { const blob = await res.json(); finalImg = blob.url; }
+      } catch { showBanner("Erro no upload da foto.", "error"); }
+      setIsUploading(false);
+    }
+
+    const c = taxonomy.categories.find(x => x.id === catId)?.name || "";
+    const b = taxonomy.brands.find(x => x.id === brandId)?.name || "";
+    const s = taxonomy.sizes.find(x => x.id === sizeId)?.name || "";
+    const co = taxonomy.colors.find(x => x.id === colorId)?.name || "";
+    const name = [c, b, s ? `Tamanho ${s}` : "", co].filter(Boolean).join(" ") || "Nova Peça do Lote";
+
+    const data = {
+      name, categoryId: catId, brandId: brandId, sizeId: sizeId, colorId: colorId, tags: selectedTags, 
+      observations: formData.get("observations") as string, lotId: targetLotForPiece.id, storeId: selectedTags.includes("Em consignação") ? (storeId || null) : null, 
+      purchasePrice: targetLotForPiece.averageCost, registerSale: selectedTags.includes("Vendida"), salePrice: selectedTags.includes("Vendida") ? Number(formData.get("salePrice")) : undefined,
+      imageUrl: finalImg && !finalImg.startsWith('blob:') ? finalImg : undefined
+    };
+
+    const result = await createPieceAction(companyId, data);
+    setLoading(false); 
+    if (result.success) { 
+        showBanner("Peça adicionada ao lote!", "success"); 
+        await loadData(companyId); 
+        // Prepara para a próxima peça
+        setCatId(""); setBrandId(""); setSizeId(""); setColorId(""); setSelectedTags([]); setImageFile(null); setImagePreview(null);
+    } else { showBanner(result.error || "Erro.", "error"); }
+  }
+
+  const formatCurrency = (val: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
+  const formatDate = (date: Date) => new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(new Date(date));
 
   if (!companyId) {
     return (
@@ -164,7 +306,7 @@ export default function AcquisitionsPage() {
                 </DialogDescription>
               </DialogHeader>
 
-              <form key={editingLot?.id || "new"} onSubmit={handleSubmit} className="space-y-5 pt-2">
+              <form key={editingLot?.id || "new"} onSubmit={handleLotSubmit} className="space-y-5 pt-2">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <Label htmlFor="sourceName" className="text-[#0A244A]">Onde você foi?</Label>
@@ -172,7 +314,7 @@ export default function AcquisitionsPage() {
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="sourceType" className="text-[#0A244A]">Tipo</Label>
-                    <select id="sourceType" name="sourceType" defaultValue={editingLot?.sourceType || ""} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm focus:border-[#1E5AA8] focus:ring-1 focus:ring-[#1E5AA8] outline-none" required>
+                    <select id="sourceType" name="sourceType" defaultValue={editingLot?.sourceType || ""} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm focus:border-[#1E5AA8] outline-none" required>
                       <option value="">Selecione...</option>
                       {SOURCE_TYPES.map(type => (
                         <option key={type} value={type}>{type.replace(/_/g, ' ')}</option>
@@ -216,6 +358,7 @@ export default function AcquisitionsPage() {
             </DialogContent>
           </Dialog>
 
+          {/* Modal de Exclusão do Lote */}
           <Dialog open={!!lotToDelete} onOpenChange={(val) => !val && setLotToDelete(null)}>
             <DialogContent className="w-[90vw] sm:max-w-md rounded-xl">
               <DialogHeader>
@@ -234,6 +377,80 @@ export default function AcquisitionsPage() {
               </div>
             </DialogContent>
           </Dialog>
+
+          {/* NOVO MODAL: LANÇAMENTO RÁPIDO DE PEÇAS NO LOTE */}
+          <Dialog open={openPieceForm} onOpenChange={closePieceEntry}>
+            <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 rounded-xl">
+              {quickAdd.isOpen ? (
+                <div className="space-y-6 py-2">
+                  <div className="flex items-center gap-2 mb-4">
+                    <button onClick={() => setQuickAdd({ isOpen: false, type: "", label: "" })} className="p-2 hover:bg-zinc-100 rounded-full transition-colors cursor-pointer">
+                      <ArrowLeft className="w-5 h-5 text-zinc-600" />
+                    </button>
+                    <div>
+                      <DialogTitle className="text-[#0A244A]">Novo Cadastro</DialogTitle>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[#0A244A]">Nome da {quickAdd.label}</Label>
+                    <Input autoFocus value={quickAddValue} onChange={(e) => setQuickAddValue(e.target.value)} />
+                  </div>
+                  <Button onClick={handleSaveQuickAdd} className="w-full bg-[#1E5AA8] hover:bg-[#103A73] text-white" disabled={loading || !quickAddValue}>
+                    {loading ? "A processar..." : "Salvar e Voltar"}
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <DialogHeader>
+                    <DialogTitle className="text-[#0A244A] flex flex-col">
+                        Registrar Peça do Lote
+                        <span className="text-sm font-normal text-zinc-500 mt-1">Destino: {targetLotForPiece?.sourceName} (Custo médio: {formatCurrency(targetLotForPiece?.averageCost || 0)})</span>
+                    </DialogTitle>
+                  </DialogHeader>
+                  <form onSubmit={handlePieceSubmit} className="space-y-5 pt-2">
+                    <div className="flex justify-center mb-4">
+                      <input type="file" accept="image/*" capture="environment" className="hidden" ref={fileInputRef} onChange={handleImageChange} />
+                      <div onClick={() => fileInputRef.current?.click()} className="w-32 h-32 rounded-xl border-2 border-dashed border-zinc-300 bg-zinc-50 flex flex-col items-center justify-center cursor-pointer hover:bg-zinc-100 overflow-hidden relative group">
+                        {imagePreview ? (
+                          <><Image src={imagePreview} alt="Preview" fill className="object-cover" /><div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center"><Camera className="w-8 h-8 text-white" /></div></>
+                        ) : (
+                          <><Camera className="w-8 h-8 text-zinc-400 mb-2" /><span className="text-xs text-zinc-500">Tirar Foto</span></>
+                        )}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div><Label>Categoria</Label><SearchableSelect value={catId} onChange={setCatId} options={taxonomy.categories} placeholder="Selecione" newItemLabel="Nova Categoria" onAddNew={() => triggerQuickAdd('category', 'Categoria')} /></div>
+                      <div><Label>Marca</Label><SearchableSelect value={brandId} onChange={setBrandId} options={taxonomy.brands} placeholder="Selecione" newItemLabel="Nova Marca" onAddNew={() => triggerQuickAdd('brand', 'Marca')} /></div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div><Label>Tamanho</Label><SearchableSelect value={sizeId} onChange={setSizeId} options={taxonomy.sizes} placeholder="Selecione" newItemLabel="Novo Tamanho" onAddNew={() => triggerQuickAdd('size', 'Tamanho')} /></div>
+                      <div><Label>Cor</Label><SearchableSelect value={colorId} onChange={setColorId} options={taxonomy.colors} placeholder="Selecione" newItemLabel="Nova Cor" onAddNew={() => triggerQuickAdd('color', 'Cor')} /></div>
+                    </div>
+                    <div className="space-y-3 bg-zinc-50 border border-zinc-200 rounded-lg p-4">
+                      <Label className="flex items-center gap-2"><Tag className="w-4 h-4" /> Etiquetas (Estado Atual)</Label>
+                      <div className="flex flex-wrap gap-2">
+                        {AVAILABLE_TAGS.map(tag => (
+                          <button type="button" key={tag} onClick={() => toggleTag(tag)} className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-all ${selectedTags.includes(tag) ? TAG_COLORS[tag] : "bg-white text-zinc-500 hover:bg-zinc-100"}`}>{tag}</button>
+                        ))}
+                      </div>
+                      {selectedTags.includes("Em consignação") && (
+                         <div className="mt-4 pt-4 border-t"><Label>Parceiro (Consignação)</Label><SearchableSelect value={storeId} onChange={setStoreId} options={taxonomy.stores} placeholder="Onde está a peça?" newItemLabel="Novo Parceiro" onAddNew={() => triggerQuickAdd('store', 'Parceiro')} /></div>
+                      )}
+                      {selectedTags.includes("Vendida") && (
+                         <div className="mt-4 pt-4 border-t"><Label>Valor Efetivo da Venda (R$)</Label><Input name="salePrice" type="number" step="0.01" required /></div>
+                      )}
+                    </div>
+                    <div><Label>Observações</Label><Input name="observations" placeholder="Fio puxado, mancha pequena..." /></div>
+                    <Button type="submit" className="w-full bg-[#1E5AA8] h-12 flex gap-2 font-medium" disabled={loading || isUploading}>
+                      {(loading || isUploading) && <Loader2 className="w-5 h-5 animate-spin" />}
+                      {isUploading ? "A enviar foto..." : "Salvar e Continuar Lançando"}
+                    </Button>
+                  </form>
+                </>
+              )}
+            </DialogContent>
+          </Dialog>
+
         </div>
       </div>
 
@@ -248,7 +465,7 @@ export default function AcquisitionsPage() {
           </div>
         ) : (
           <>
-            {/* VISTA MOBILE: Cartões Inteligentes */}
+            {/* VISTA MOBILE */}
             <div className="md:hidden flex flex-col divide-y divide-zinc-100">
               {lots.map((lot) => {
                 const percent = Math.min((lot.registeredPieces / lot.quantity) * 100, 100);
@@ -303,6 +520,13 @@ export default function AcquisitionsPage() {
                             <p className="text-[9px] text-zinc-500 mt-0.5">Estimativa: {formatCurrency(lot.expectedRevenue)}</p>
                          </div>
                       </div>
+
+                      {/* Botão Gigante de Lançar Peças */}
+                      <div className="mt-4 pt-3 border-t border-zinc-200">
+                         <Button onClick={() => openPieceEntry(lot)} className="w-full bg-[#1E5AA8] hover:bg-[#103A73] text-white flex gap-2 h-11 cursor-pointer font-bold">
+                            <PlusCircle className="w-4 h-4"/> LANÇAR PEÇA DESTE LOTE
+                         </Button>
+                      </div>
                     </div>
 
                     {lot.notes && (
@@ -316,7 +540,7 @@ export default function AcquisitionsPage() {
               })}
             </div>
 
-            {/* VISTA DESKTOP: Tabela Inteligente */}
+            {/* VISTA DESKTOP */}
             <div className="hidden md:block overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -325,9 +549,8 @@ export default function AcquisitionsPage() {
                     <TableHead className="font-semibold w-48">Progresso do Garimpo</TableHead>
                     <TableHead className="text-right font-semibold">Custo Total</TableHead>
                     <TableHead className="text-right font-semibold">Custo/Peça</TableHead>
-                    <TableHead className="text-right font-semibold">Faturamento Prev.</TableHead>
                     <TableHead className="text-right font-semibold">Lucro Potencial</TableHead>
-                    <TableHead className="text-right w-24 font-semibold">Ações</TableHead>
+                    <TableHead className="text-right w-44 font-semibold">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -366,18 +589,18 @@ export default function AcquisitionsPage() {
                         <TableCell className="font-semibold text-rose-600 text-right">
                           {formatCurrency(lot.averageCost)}
                         </TableCell>
-                        <TableCell className="font-medium text-zinc-600 text-right">
-                          {formatCurrency(lot.expectedRevenue)}
-                        </TableCell>
                         <TableCell className={`font-bold text-right ${lot.expectedProfit > 0 ? 'text-emerald-600' : 'text-zinc-500'}`}>
                           {lot.expectedProfit > 0 && '+'}{formatCurrency(lot.expectedProfit)}
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1.5">
-                            <button onClick={() => handleEditClick(lot)} className="p-2 text-zinc-400 hover:text-[#1E5AA8] hover:bg-blue-50 rounded-md transition-all cursor-pointer">
+                            <button onClick={() => openPieceEntry(lot)} className="px-3 py-1.5 text-xs font-bold text-white bg-[#1E5AA8] hover:bg-[#103A73] rounded-md transition-all cursor-pointer flex items-center gap-1" title="Lançar Peça">
+                              <PlusCircle className="w-3.5 h-3.5" /> Lançar Peça
+                            </button>
+                            <button onClick={() => handleEditClick(lot)} className="p-2 text-zinc-400 hover:text-[#1E5AA8] hover:bg-blue-50 rounded-md transition-all cursor-pointer" title="Editar Lote">
                               <Pencil className="w-4 h-4" />
                             </button>
-                            <button onClick={() => setLotToDelete(lot.id)} className="p-2 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-all cursor-pointer">
+                            <button onClick={() => setLotToDelete(lot.id)} className="p-2 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-all cursor-pointer" title="Excluir Lote">
                               <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
