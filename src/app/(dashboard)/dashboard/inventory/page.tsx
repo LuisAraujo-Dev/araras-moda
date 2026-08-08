@@ -9,8 +9,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Package, PlusCircle, Tag, CheckCircle2, AlertCircle, Filter, Pencil, Trash2, Store, ArrowLeft, Globe, Eye, EyeOff, ChevronDown, Search, Check, ImageIcon, Camera, Loader2, SlidersHorizontal } from "lucide-react";
-import { getPiecesAction, createPieceAction, updatePieceAction, deletePieceAction, getTaxonomyAction, quickAddCategory, quickAddBrand, quickAddSize, quickAddColor, quickAddLot, quickAddStore } from "@/app/actions/piece.actions";
+import { Package, PlusCircle, Tag, CheckCircle2, AlertCircle, Filter, Pencil, Trash2, Store, ArrowLeft, Globe, Eye, EyeOff, ChevronDown, Search, Check, ImageIcon, Camera, Loader2, SlidersHorizontal, Settings2 } from "lucide-react";
+import { getPiecesAction, createPieceAction, updatePieceAction, deletePieceAction, getTaxonomyAction, quickAddCategory, quickAddBrand, quickAddSize, quickAddColor, quickAddLot, quickAddStore, deleteTaxonomyAction } from "@/app/actions/piece.actions";
 import { togglePieceVisibilityAction } from "@/app/actions/storefront.actions";
 import { checkOnboardingStatusAction } from "@/app/actions/setup.actions";
 import { Category, Brand, Lot, Size, Color, Piece, Store as StoreModel, PieceImage } from "@prisma/client";
@@ -144,6 +144,11 @@ export default function InventoryPage() {
   const [pieces, setPieces] = useState<PieceWithRelations[]>([]);
   const [taxonomy, setTaxonomy] = useState<TaxonomyData>({ categories: [], brands: [], lots: [], sizes: [], colors: [], stores: [] });
   const [open, setOpen] = useState(false);
+  
+  // States para Gerenciar Atributos
+  const [manageAttrOpen, setManageAttrOpen] = useState(false);
+  const [attrTab, setAttrTab] = useState<'categories'|'brands'|'sizes'|'colors'>('categories');
+
   const [loading, setLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [banner, setBanner] = useState({ show: false, message: "", type: "" });
@@ -257,6 +262,27 @@ export default function InventoryPage() {
     
     setLoading(false);
     setQuickAdd({ isOpen: false, type: "", label: "" });
+  };
+
+  const handleDeleteAttr = async (tab: string, id: string) => {
+    if (!companyId) return;
+    const typeMap: Record<string, 'category'|'brand'|'size'|'color'> = {
+      'categories': 'category',
+      'brands': 'brand',
+      'sizes': 'size',
+      'colors': 'color'
+    };
+    
+    setLoading(true);
+    const result = await deleteTaxonomyAction(typeMap[tab], id, companyId);
+    setLoading(false);
+    
+    if (result.success) {
+      showBanner("Item excluído com sucesso!", "success");
+      await loadData(companyId);
+    } else {
+      showBanner(result.error || "Erro ao excluir.", "error");
+    }
   };
 
   const toggleTag = (tag: string) => {
@@ -437,7 +463,50 @@ export default function InventoryPage() {
           <p className="text-[#4B4B4B] mt-1 text-sm md:text-base">Gerencie peças e controle o seu estoque.</p>
         </div>
 
-        <div className="flex items-center gap-3 w-full sm:w-auto">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          
+          {/* Botão e Modal de Gerenciar Atributos */}
+          <Dialog open={manageAttrOpen} onOpenChange={setManageAttrOpen}>
+            <DialogTrigger className="flex items-center justify-center gap-2 cursor-pointer bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-50 transition-colors shadow-sm h-10 px-4 rounded-md text-sm font-medium">
+              <Settings2 className="w-4 h-4" /> Atributos
+            </DialogTrigger>
+            <DialogContent className="w-[95vw] sm:max-w-md max-h-[90vh] overflow-hidden flex flex-col p-0 rounded-xl">
+              <div className="p-5 pb-3 border-b border-zinc-100">
+                <DialogTitle className="text-[#0A244A]">Gerenciar Atributos</DialogTitle>
+                <DialogDescription className="text-xs mt-1">Exclua categorias, marcas, tamanhos ou cores criadas por engano.</DialogDescription>
+              </div>
+              
+              <div className="px-5 pt-3 border-b border-zinc-100 flex gap-4 overflow-x-auto custom-scrollbar">
+                <button onClick={() => setAttrTab('categories')} className={`pb-2 text-sm font-medium whitespace-nowrap transition-colors ${attrTab === 'categories' ? 'border-b-2 border-[#1E5AA8] text-[#1E5AA8]' : 'text-zinc-500 hover:text-zinc-700'}`}>Categorias</button>
+                <button onClick={() => setAttrTab('brands')} className={`pb-2 text-sm font-medium whitespace-nowrap transition-colors ${attrTab === 'brands' ? 'border-b-2 border-[#1E5AA8] text-[#1E5AA8]' : 'text-zinc-500 hover:text-zinc-700'}`}>Marcas</button>
+                <button onClick={() => setAttrTab('sizes')} className={`pb-2 text-sm font-medium whitespace-nowrap transition-colors ${attrTab === 'sizes' ? 'border-b-2 border-[#1E5AA8] text-[#1E5AA8]' : 'text-zinc-500 hover:text-zinc-700'}`}>Tamanhos</button>
+                <button onClick={() => setAttrTab('colors')} className={`pb-2 text-sm font-medium whitespace-nowrap transition-colors ${attrTab === 'colors' ? 'border-b-2 border-[#1E5AA8] text-[#1E5AA8]' : 'text-zinc-500 hover:text-zinc-700'}`}>Cores</button>
+              </div>
+
+              <div className="p-5 overflow-y-auto custom-scrollbar flex-1 max-h-[50vh]">
+                {taxonomy[attrTab]?.length === 0 ? (
+                  <p className="text-center text-zinc-500 text-sm py-8">Nenhum item cadastrado.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {taxonomy[attrTab]?.map(item => (
+                        <div key={item.id} className="flex items-center justify-between p-2.5 rounded-md border border-zinc-100 hover:bg-zinc-50 transition-colors">
+                          <span className="text-sm font-medium text-zinc-700">{item.name}</span>
+                          <button 
+                            onClick={() => handleDeleteAttr(attrTab, item.id)}
+                            disabled={loading}
+                            className="p-1.5 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
+                            title="Excluir item"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+
           <Dialog open={open} onOpenChange={handleCloseModal}>
             <DialogTrigger className="flex flex-1 sm:flex-none items-center justify-center gap-2 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white transition-colors shadow-sm h-10 px-4 rounded-md text-sm font-medium">
               <PlusCircle className="w-4 h-4" /> Cadastrar Peça
@@ -602,10 +671,10 @@ export default function InventoryPage() {
                 <Input className="pl-9 h-10 border-zinc-300" placeholder="Buscar por nome ou SKU..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" className={`h-10 px-4 flex gap-2 border-zinc-300 ${showFilters ? 'bg-zinc-100' : 'bg-white'}`} onClick={() => setShowFilters(!showFilters)}>
+                <Button variant="outline" className={`h-10 px-4 flex gap-2 border-zinc-300 cursor-pointer transition-colors ${showFilters ? 'bg-zinc-100' : 'bg-white hover:bg-zinc-50'}`} onClick={() => setShowFilters(!showFilters)}>
                   <SlidersHorizontal className="w-4 h-4" /> Filtros
                 </Button>
-                <select className="h-10 border border-zinc-300 rounded-md text-sm px-3 bg-white outline-none focus:border-[#1E5AA8] focus:ring-1 focus:ring-[#1E5AA8]" value={sortBy} onChange={e => setSortBy(e.target.value)}>
+                <select className="h-10 border border-zinc-300 rounded-md text-sm px-3 bg-white outline-none focus:border-[#1E5AA8] focus:ring-1 focus:ring-[#1E5AA8] cursor-pointer" value={sortBy} onChange={e => setSortBy(e.target.value)}>
                   <option value="newest">Mais Recentes</option>
                   <option value="price_asc">Menor Preço</option>
                   <option value="price_desc">Maior Preço</option>
@@ -617,42 +686,42 @@ export default function InventoryPage() {
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 pt-3 border-t border-zinc-200 animate-in slide-in-from-top-2">
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-zinc-600">Categoria</label>
-                  <select className="w-full h-9 border border-zinc-300 rounded text-xs px-2 bg-white" value={advFilters.category} onChange={e => setAdvFilters({...advFilters, category: e.target.value})}>
+                  <select className="w-full h-9 border border-zinc-300 rounded text-xs px-2 bg-white outline-none" value={advFilters.category} onChange={e => setAdvFilters({...advFilters, category: e.target.value})}>
                     <option value="">Todas</option>
                     {taxonomy.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-zinc-600">Marca</label>
-                  <select className="w-full h-9 border border-zinc-300 rounded text-xs px-2 bg-white" value={advFilters.brand} onChange={e => setAdvFilters({...advFilters, brand: e.target.value})}>
+                  <select className="w-full h-9 border border-zinc-300 rounded text-xs px-2 bg-white outline-none" value={advFilters.brand} onChange={e => setAdvFilters({...advFilters, brand: e.target.value})}>
                     <option value="">Todas</option>
                     {taxonomy.brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-zinc-600">Tamanho</label>
-                  <select className="w-full h-9 border border-zinc-300 rounded text-xs px-2 bg-white" value={advFilters.size} onChange={e => setAdvFilters({...advFilters, size: e.target.value})}>
+                  <select className="w-full h-9 border border-zinc-300 rounded text-xs px-2 bg-white outline-none" value={advFilters.size} onChange={e => setAdvFilters({...advFilters, size: e.target.value})}>
                     <option value="">Todos</option>
                     {taxonomy.sizes.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-zinc-600">Cor</label>
-                  <select className="w-full h-9 border border-zinc-300 rounded text-xs px-2 bg-white" value={advFilters.color} onChange={e => setAdvFilters({...advFilters, color: e.target.value})}>
+                  <select className="w-full h-9 border border-zinc-300 rounded text-xs px-2 bg-white outline-none" value={advFilters.color} onChange={e => setAdvFilters({...advFilters, color: e.target.value})}>
                     <option value="">Todas</option>
                     {taxonomy.colors.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-zinc-600">Origem/Lote</label>
-                  <select className="w-full h-9 border border-zinc-300 rounded text-xs px-2 bg-white" value={advFilters.lot} onChange={e => setAdvFilters({...advFilters, lot: e.target.value})}>
+                  <select className="w-full h-9 border border-zinc-300 rounded text-xs px-2 bg-white outline-none" value={advFilters.lot} onChange={e => setAdvFilters({...advFilters, lot: e.target.value})}>
                     <option value="">Todos</option>
                     {taxonomy.lots.map(l => <option key={l.id} value={l.id}>{l.sourceName}</option>)}
                   </select>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-zinc-600">Fornecedor/Loja</label>
-                  <select className="w-full h-9 border border-zinc-300 rounded text-xs px-2 bg-white" value={advFilters.store} onChange={e => setAdvFilters({...advFilters, store: e.target.value})}>
+                  <select className="w-full h-9 border border-zinc-300 rounded text-xs px-2 bg-white outline-none" value={advFilters.store} onChange={e => setAdvFilters({...advFilters, store: e.target.value})}>
                     <option value="">Todos</option>
                     {taxonomy.stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>

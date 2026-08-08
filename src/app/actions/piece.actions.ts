@@ -81,6 +81,35 @@ export async function quickAddLot(companyId: string, name: string) {
   return prisma.lot.create({ data: { code, purchaseDate: new Date(), sourceName: name, sourceType: SourceType.OUTRO, totalCost: 0, quantity: 1, companyId: realId } });
 }
 
+export async function deleteTaxonomyAction(type: 'category'|'brand'|'size'|'color', id: string, companyId: string) {
+  try {
+    const realId = await getRealCompanyId(companyId);
+    
+    if (type === 'category') {
+      const count = await prisma.piece.count({ where: { categoryId: id, companyId: realId } });
+      if (count > 0) return { success: false, error: "Não é possível excluir. Existem peças usando esta categoria." };
+      await prisma.category.delete({ where: { id, companyId: realId } });
+    } else if (type === 'brand') {
+      const count = await prisma.piece.count({ where: { brandId: id, companyId: realId } });
+      if (count > 0) return { success: false, error: "Não é possível excluir. Existem peças usando esta marca." };
+      await prisma.brand.delete({ where: { id, companyId: realId } });
+    } else if (type === 'size') {
+      const count = await prisma.piece.count({ where: { sizeId: id, companyId: realId } });
+      if (count > 0) return { success: false, error: "Não é possível excluir. Existem peças usando este tamanho." };
+      await prisma.size.delete({ where: { id, companyId: realId } });
+    } else if (type === 'color') {
+      const count = await prisma.piece.count({ where: { colorId: id, companyId: realId } });
+      if (count > 0) return { success: false, error: "Não é possível excluir. Existem peças usando esta cor." };
+      await prisma.color.delete({ where: { id, companyId: realId } });
+    }
+    
+    revalidatePath("/dashboard/inventory");
+    return { success: true };
+  } catch {
+    return { success: false, error: "Falha ao excluir o item." };
+  }
+}
+
 type CreatePieceInput = {
   name: string; categoryId: string; brandId: string; sizeId: string; colorId: string;
   tags: string[]; observations: string; lotId: string; storeId: string | null; purchasePrice: number;
