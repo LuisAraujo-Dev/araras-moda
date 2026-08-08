@@ -2,10 +2,22 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
 async function getRealCompanyId() {
-  const company = await prisma.company.findFirst();
-  return company?.id || "company-placeholder-id";
+  const session = await getServerSession(authOptions);
+  
+  if (session?.user?.email) {
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+    });
+    if (user?.companyId) {
+      return user.companyId;
+    }
+  }
+  
+  return "company-placeholder-id";
 }
 
 export async function getDashboardDataAction() {
@@ -43,7 +55,6 @@ export async function getDashboardDataAction() {
       return new Date(a.expectedReturnDate).getTime() - new Date(b.expectedReturnDate).getTime();
     });
 
-    // Pega apenas o primeiro nome do utilizador (Ex: "Luis")
     const firstName = user?.name ? user.name.split(" ")[0] : "Gestor";
 
     return {
