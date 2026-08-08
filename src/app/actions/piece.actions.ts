@@ -57,12 +57,12 @@ export async function getTaxonomyAction(companyId: string) {
   try {
     const realId = await getRealCompanyId(companyId);
     const [categories, brands, lots, sizes, colors, stores] = await Promise.all([
-      prisma.category.findMany({ where: { companyId: realId }, take: 15, orderBy: { name: 'asc' } }),
-      prisma.brand.findMany({ where: { companyId: realId }, take: 15, orderBy: { name: 'asc' } }),
-      prisma.lot.findMany({ where: { companyId: realId }, take: 15, orderBy: { createdAt: 'desc' } }),
-      prisma.size.findMany({ where: { companyId: realId }, take: 15, orderBy: { name: 'asc' } }),
-      prisma.color.findMany({ where: { companyId: realId }, take: 15, orderBy: { name: 'asc' } }),
-      prisma.store.findMany({ where: { companyId: realId }, take: 15, orderBy: { name: 'asc' } }),
+      prisma.category.findMany({ where: { companyId: realId }, orderBy: { name: 'asc' } }),
+      prisma.brand.findMany({ where: { companyId: realId }, orderBy: { name: 'asc' } }),
+      prisma.lot.findMany({ where: { companyId: realId }, orderBy: { createdAt: 'desc' } }),
+      prisma.size.findMany({ where: { companyId: realId }, orderBy: { name: 'asc' } }),
+      prisma.color.findMany({ where: { companyId: realId }, orderBy: { name: 'asc' } }),
+      prisma.store.findMany({ where: { companyId: realId }, orderBy: { name: 'asc' } }),
     ]);
     return { categories, brands, lots, sizes, colors, stores };
   } catch {
@@ -74,7 +74,7 @@ export async function quickAddCategory(c: string, n: string) { return prisma.cat
 export async function quickAddBrand(c: string, n: string) { return prisma.brand.create({ data: { name: n, companyId: await getRealCompanyId(c) } }); }
 export async function quickAddSize(c: string, n: string) { return prisma.size.create({ data: { name: n, companyId: await getRealCompanyId(c) } }); }
 export async function quickAddColor(c: string, n: string) { return prisma.color.create({ data: { name: n, companyId: await getRealCompanyId(c) } }); }
-export async function quickAddStore(c: string, n: string) { return prisma.store.create({ data: { name: n, commissionPercentage: 50, companyId: await getRealCompanyId(c) } }); }
+export async function quickAddStore(c: string, n: string) { return prisma.store.create({ data: { name: n, commissionPercentage: 0, companyId: await getRealCompanyId(c) } }); }
 export async function quickAddLot(companyId: string, name: string) {
   const realId = await getRealCompanyId(companyId);
   const code = name.toUpperCase().replace(/\s+/g, '-').substring(0, 15) + `-${Math.floor(Math.random() * 1000)}`;
@@ -97,7 +97,7 @@ export async function createPieceAction(companyId: string, data: CreatePieceInpu
       data: {
         code: autoCode, qrCode: `QR-${autoCode}`, name: data.name, categoryId: data.categoryId, brandId: data.brandId,
         sizeId: data.sizeId, colorId: data.colorId, tags: data.tags, observations: data.observations,
-        gender: "UNISSEX", lotId: data.lotId, storeId: data.storeId, purchasePrice: data.purchasePrice,
+        gender: "UNISSEX", lotId: data.lotId, storeId: data.storeId || null, purchasePrice: data.purchasePrice,
         estimatedSalePrice: 0, status: data.tags.includes("Vendida") ? "VENDIDA" : "ESTOQUE", companyId: realId,
       },
     });
@@ -133,7 +133,7 @@ export async function updatePieceAction(pieceId: string, companyId: string, data
       where: { id: pieceId, companyId: realId },
       data: {
         name: data.name, categoryId: data.categoryId, brandId: data.brandId, sizeId: data.sizeId, colorId: data.colorId,
-        tags: data.tags, observations: data.observations, lotId: data.lotId, storeId: data.storeId, purchasePrice: data.purchasePrice,
+        tags: data.tags, observations: data.observations, lotId: data.lotId, storeId: data.storeId || null, purchasePrice: data.purchasePrice,
         status: data.tags.includes("Vendida") ? "VENDIDA" : (data.storeId ? "CONSIGNADA" : "ESTOQUE")
       },
     });

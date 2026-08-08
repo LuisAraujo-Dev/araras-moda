@@ -159,7 +159,6 @@ export default function InventoryPage() {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [filterTags, setFilterTags] = useState<string[]>([]);
 
-  // Estados para Gestão de Imagens
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -306,20 +305,15 @@ export default function InventoryPage() {
     event.preventDefault(); 
     if (!companyId) return;
 
-    // 1. CAPTURA DOS DADOS DO FORMULÁRIO (SÍNCRONO)
-    // Extraímos os dados de texto *antes* de iniciar o processo assíncrono da imagem.
-    // Assim prevenimos o "crash" interno do React que congelava a aplicação.
     const formData = new FormData(event.currentTarget);
 
     setLoading(true);
-    let finalImageUrl = imagePreview; // Mantém a URL existente se for edição e não mudar foto
+    let finalImageUrl = imagePreview; 
 
-    // 2. ENVIO DA IMAGEM PARA A VERCEL BLOB
     if (imageFile) {
       setIsUploading(true);
 
       try {
-        // Ajuste: A Vercel espera o nome do ficheiro na URL e o ficheiro bruto no "body"
         const res = await fetch(`/api/upload?filename=${encodeURIComponent(imageFile.name)}`, { 
           method: "POST", 
           body: imageFile 
@@ -327,7 +321,7 @@ export default function InventoryPage() {
         
         if (res.ok) {
           const blob = await res.json();
-          finalImageUrl = blob.url; // URL pública da imagem recém guardada
+          finalImageUrl = blob.url; 
         } else {
           console.error("Erro no response do upload da imagem:", await res.text());
           showBanner("Aviso: Falha ao guardar a foto, mas a peça será cadastrada.", "error");
@@ -339,14 +333,12 @@ export default function InventoryPage() {
       setIsUploading(false);
     }
 
-    // 3. SALVAR OS DADOS NO BANCO DE DADOS
     const catName = taxonomy.categories.find(c => c.id === catId)?.name || "";
     const brandName = taxonomy.brands.find(b => b.id === brandId)?.name || "";
     const sizeName = taxonomy.sizes.find(s => s.id === sizeId)?.name || "";
     const colorName = taxonomy.colors.find(c => c.id === colorId)?.name || "";
     const autoName = [catName, brandName, sizeName ? `Tamanho ${sizeName}` : "", colorName].filter(Boolean).join(" ") || "Nova Peça";
 
-    // Garante que só guarda URLs válidas (evita guardar as strings blob: locais do navegador)
     const safeImageUrl = finalImageUrl && !finalImageUrl.startsWith('blob:') ? finalImageUrl : undefined;
 
     const data = {
@@ -369,7 +361,7 @@ export default function InventoryPage() {
       ? await updatePieceAction(editingPiece.id, companyId, data) 
       : await createPieceAction(companyId, data);
       
-    setLoading(false); // Agora este código corre sempre, destrancando o ecrã!
+    setLoading(false); 
 
     if (result.success) {
       handleCloseModal(false);
@@ -464,7 +456,6 @@ export default function InventoryPage() {
                   </DialogHeader>
                   <form onSubmit={handleSubmit} className="space-y-5 pt-2">
                     
-                    {/* Botão Quadrado Gigante de Upload */}
                     <div className="flex justify-center mb-6">
                       <input 
                         type="file" 
