@@ -1,3 +1,4 @@
+//src/app/(dashboard)/dashboard/inventory/page.tsx
 "use client";
 
 import { useState, useEffect, useRef } from "react";
@@ -8,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Package, PlusCircle, Tag, CheckCircle2, AlertCircle, Filter, Pencil, Trash2, Store, ArrowLeft, Globe, Eye, EyeOff, ChevronDown, Search, Check, ImageIcon, Camera, Loader2 } from "lucide-react";
+import { Package, PlusCircle, Tag, CheckCircle2, AlertCircle, Filter, Pencil, Trash2, Store, ArrowLeft, Globe, Eye, EyeOff, ChevronDown, Search, Check, ImageIcon, Camera, Loader2, SlidersHorizontal } from "lucide-react";
 import { getPiecesAction, createPieceAction, updatePieceAction, deletePieceAction, getTaxonomyAction, quickAddCategory, quickAddBrand, quickAddSize, quickAddColor, quickAddLot, quickAddStore } from "@/app/actions/piece.actions";
 import { togglePieceVisibilityAction } from "@/app/actions/storefront.actions";
 import { checkOnboardingStatusAction } from "@/app/actions/setup.actions";
@@ -157,7 +158,12 @@ export default function InventoryPage() {
   const [lotId, setLotId] = useState(""); 
   const [storeId, setStoreId] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+  const [sortBy, setSortBy] = useState("newest");
   const [filterTags, setFilterTags] = useState<string[]>([]);
+  const [advFilters, setAdvFilters] = useState({ category: "", brand: "", lot: "", store: "", size: "", color: "" });
 
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -306,13 +312,11 @@ export default function InventoryPage() {
     if (!companyId) return;
 
     const formData = new FormData(event.currentTarget);
-
     setLoading(true);
     let finalImageUrl = imagePreview; 
 
     if (imageFile) {
       setIsUploading(true);
-
       try {
         const res = await fetch(`/api/upload?filename=${encodeURIComponent(imageFile.name)}`, { 
           method: "POST", 
@@ -323,11 +327,9 @@ export default function InventoryPage() {
           const blob = await res.json();
           finalImageUrl = blob.url; 
         } else {
-          console.error("Erro no response do upload da imagem:", await res.text());
           showBanner("Aviso: Falha ao guardar a foto, mas a peça será cadastrada.", "error");
         }
-      } catch (e) {
-        console.error("Erro de conexão no upload:", e);
+      } catch {
         showBanner("Erro de conexão na fotografia.", "error");
       }
       setIsUploading(false);
@@ -386,8 +388,27 @@ export default function InventoryPage() {
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
 
   const filteredPieces = pieces.filter(piece => {
-    if (filterTags.length === 0) return true;
-    return filterTags.some(tag => piece.tags.includes(tag));
+    if (filterTags.length > 0 && !filterTags.some(tag => piece.tags.includes(tag))) return false;
+    
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      if (!piece.name.toLowerCase().includes(term) && !piece.code.toLowerCase().includes(term)) return false;
+    }
+
+    if (advFilters.category && piece.categoryId !== advFilters.category) return false;
+    if (advFilters.brand && piece.brandId !== advFilters.brand) return false;
+    if (advFilters.lot && piece.lotId !== advFilters.lot) return false;
+    if (advFilters.store && piece.storeId !== advFilters.store) return false;
+    if (advFilters.size && piece.sizeId !== advFilters.size) return false;
+    if (advFilters.color && piece.colorId !== advFilters.color) return false;
+
+    return true;
+  });
+
+  filteredPieces.sort((a, b) => {
+    if (sortBy === "price_asc") return a.purchasePrice - b.purchasePrice;
+    if (sortBy === "price_desc") return b.purchasePrice - a.purchasePrice;
+    return 0;
   });
 
   if (!companyId) {
@@ -455,20 +476,9 @@ export default function InventoryPage() {
                     </DialogDescription>
                   </DialogHeader>
                   <form onSubmit={handleSubmit} className="space-y-5 pt-2">
-                    
                     <div className="flex justify-center mb-6">
-                      <input 
-                        type="file" 
-                        accept="image/*" 
-                        capture="environment" 
-                        className="hidden" 
-                        ref={fileInputRef} 
-                        onChange={handleImageChange} 
-                      />
-                      <div 
-                        onClick={() => fileInputRef.current?.click()}
-                        className="w-32 h-32 sm:w-40 sm:h-40 rounded-xl border-2 border-dashed border-zinc-300 bg-zinc-50 flex flex-col items-center justify-center cursor-pointer hover:bg-zinc-100 hover:border-[#1E5AA8] transition-all overflow-hidden relative group shadow-sm"
-                      >
+                      <input type="file" accept="image/*" capture="environment" className="hidden" ref={fileInputRef} onChange={handleImageChange} />
+                      <div onClick={() => fileInputRef.current?.click()} className="w-32 h-32 sm:w-40 sm:h-40 rounded-xl border-2 border-dashed border-zinc-300 bg-zinc-50 flex flex-col items-center justify-center cursor-pointer hover:bg-zinc-100 hover:border-[#1E5AA8] transition-all overflow-hidden relative group shadow-sm">
                         {imagePreview ? (
                           <>
                             <Image src={imagePreview} alt="Preview" fill className="object-cover" sizes="160px" />
@@ -479,9 +489,7 @@ export default function InventoryPage() {
                         ) : (
                           <>
                             <Camera className="w-8 h-8 text-zinc-400 mb-2 group-hover:text-[#1E5AA8] transition-colors" />
-                            <span className="text-xs font-medium text-zinc-500 group-hover:text-[#1E5AA8] transition-colors text-center px-2">
-                              Tirar Foto<br/>(ou Galeria)
-                            </span>
+                            <span className="text-xs font-medium text-zinc-500 group-hover:text-[#1E5AA8] transition-colors text-center px-2">Tirar Foto<br/>(ou Galeria)</span>
                           </>
                         )}
                       </div>
@@ -490,44 +498,29 @@ export default function InventoryPage() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-1">
                         <Label className="text-[#0A244A]">Categoria</Label>
-                        <SearchableSelect
-                          value={catId} onChange={setCatId} options={taxonomy.categories}
-                          placeholder="Selecione..." newItemLabel="Cadastrar Nova Categoria" onAddNew={() => triggerQuickAdd('category', 'Categoria')}
-                        />
+                        <SearchableSelect value={catId} onChange={setCatId} options={taxonomy.categories} placeholder="Selecione..." newItemLabel="Cadastrar Nova Categoria" onAddNew={() => triggerQuickAdd('category', 'Categoria')} />
                       </div>
                       <div className="space-y-1">
                         <Label className="text-[#0A244A]">Marca</Label>
-                        <SearchableSelect
-                          value={brandId} onChange={setBrandId} options={taxonomy.brands}
-                          placeholder="Selecione..." newItemLabel="Cadastrar Nova Marca" onAddNew={() => triggerQuickAdd('brand', 'Marca')}
-                        />
+                        <SearchableSelect value={brandId} onChange={setBrandId} options={taxonomy.brands} placeholder="Selecione..." newItemLabel="Cadastrar Nova Marca" onAddNew={() => triggerQuickAdd('brand', 'Marca')} />
                       </div>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-1">
                         <Label className="text-[#0A244A]">Tamanho</Label>
-                        <SearchableSelect
-                          value={sizeId} onChange={setSizeId} options={taxonomy.sizes}
-                          placeholder="Selecione..." newItemLabel="Cadastrar Novo Tamanho" onAddNew={() => triggerQuickAdd('size', 'Tamanho')}
-                        />
+                        <SearchableSelect value={sizeId} onChange={setSizeId} options={taxonomy.sizes} placeholder="Selecione..." newItemLabel="Cadastrar Novo Tamanho" onAddNew={() => triggerQuickAdd('size', 'Tamanho')} />
                       </div>
                       <div className="space-y-1">
                         <Label className="text-[#0A244A]">Cor</Label>
-                        <SearchableSelect
-                          value={colorId} onChange={setColorId} options={taxonomy.colors}
-                          placeholder="Selecione..." newItemLabel="Cadastrar Nova Cor" onAddNew={() => triggerQuickAdd('color', 'Cor')}
-                        />
+                        <SearchableSelect value={colorId} onChange={setColorId} options={taxonomy.colors} placeholder="Selecione..." newItemLabel="Cadastrar Nova Cor" onAddNew={() => triggerQuickAdd('color', 'Cor')} />
                       </div>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-1">
                         <Label className="text-[#0A244A]">Origem / Lote</Label>
-                        <SearchableSelect
-                          value={lotId} onChange={setLotId} options={taxonomy.lots}
-                          placeholder="Selecione..." newItemLabel="Cadastrar Nova Origem" onAddNew={() => triggerQuickAdd('lot', 'Origem')}
-                        />
+                        <SearchableSelect value={lotId} onChange={setLotId} options={taxonomy.lots} placeholder="Selecione..." newItemLabel="Cadastrar Nova Origem" onAddNew={() => triggerQuickAdd('lot', 'Origem')} />
                       </div>
                       <div className="space-y-1">
                         <Label htmlFor="purchasePrice" className="text-[#0A244A]">Custo / Compra (R$)</Label>
@@ -548,10 +541,7 @@ export default function InventoryPage() {
                       {isConsigned && (
                         <div className="pt-4 border-t border-zinc-200 mt-4">
                           <Label className="text-purple-900 mb-2 block">Parceiro (Consignação)</Label>
-                          <SearchableSelect
-                            value={storeId} onChange={setStoreId} options={taxonomy.stores}
-                            placeholder="Onde está a peça?" newItemLabel="Cadastrar Novo Parceiro" onAddNew={() => triggerQuickAdd('store', 'Parceiro')}
-                          />
+                          <SearchableSelect value={storeId} onChange={setStoreId} options={taxonomy.stores} placeholder="Onde está a peça?" newItemLabel="Cadastrar Novo Parceiro" onAddNew={() => triggerQuickAdd('store', 'Parceiro')} />
                         </div>
                       )}
 
@@ -602,32 +592,101 @@ export default function InventoryPage() {
       </div>
 
       <div className="bg-white rounded-xl border border-zinc-200 shadow-sm overflow-hidden mt-6">
+        
         {pieces.length > 0 && (
-          <div className="p-4 border-b border-zinc-200 bg-zinc-50/50 flex flex-col items-start gap-3">
-            <span className="text-sm font-semibold text-zinc-500 flex items-center gap-2">
-              <Filter className="w-4 h-4" /> Filtrar por etiquetas:
-            </span>
-            <div className="flex flex-wrap gap-2">
-              {AVAILABLE_TAGS.map(tag => (
-                <button
-                  type="button"
-                  key={tag}
-                  onClick={() => toggleFilterTag(tag)}
-                  className={`px-3 py-1 text-xs font-medium rounded-full border transition-all cursor-pointer ${
-                    filterTags.includes(tag) 
-                      ? TAG_COLORS[tag] 
-                      : "bg-white text-zinc-500 border-zinc-200 hover:bg-zinc-100 opacity-70 hover:opacity-100"
-                  }`}
-                >
-                  {tag}
-                </button>
-              ))}
-              {filterTags.length > 0 && (
-                <button onClick={() => setFilterTags([])} className="px-3 py-1 text-xs font-medium text-zinc-500 hover:text-[#0A244A] cursor-pointer">
-                  Limpar Filtros
-                </button>
-              )}
+          <div className="p-4 border-b border-zinc-200 bg-zinc-50/50 flex flex-col gap-4">
+            
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                <Input className="pl-9 h-10 border-zinc-300" placeholder="Buscar por nome ou SKU..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" className={`h-10 px-4 flex gap-2 border-zinc-300 ${showFilters ? 'bg-zinc-100' : 'bg-white'}`} onClick={() => setShowFilters(!showFilters)}>
+                  <SlidersHorizontal className="w-4 h-4" /> Filtros
+                </Button>
+                <select className="h-10 border border-zinc-300 rounded-md text-sm px-3 bg-white outline-none focus:border-[#1E5AA8] focus:ring-1 focus:ring-[#1E5AA8]" value={sortBy} onChange={e => setSortBy(e.target.value)}>
+                  <option value="newest">Mais Recentes</option>
+                  <option value="price_asc">Menor Preço</option>
+                  <option value="price_desc">Maior Preço</option>
+                </select>
+              </div>
             </div>
+
+            {showFilters && (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 pt-3 border-t border-zinc-200 animate-in slide-in-from-top-2">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-600">Categoria</label>
+                  <select className="w-full h-9 border border-zinc-300 rounded text-xs px-2 bg-white" value={advFilters.category} onChange={e => setAdvFilters({...advFilters, category: e.target.value})}>
+                    <option value="">Todas</option>
+                    {taxonomy.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-600">Marca</label>
+                  <select className="w-full h-9 border border-zinc-300 rounded text-xs px-2 bg-white" value={advFilters.brand} onChange={e => setAdvFilters({...advFilters, brand: e.target.value})}>
+                    <option value="">Todas</option>
+                    {taxonomy.brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-600">Tamanho</label>
+                  <select className="w-full h-9 border border-zinc-300 rounded text-xs px-2 bg-white" value={advFilters.size} onChange={e => setAdvFilters({...advFilters, size: e.target.value})}>
+                    <option value="">Todos</option>
+                    {taxonomy.sizes.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-600">Cor</label>
+                  <select className="w-full h-9 border border-zinc-300 rounded text-xs px-2 bg-white" value={advFilters.color} onChange={e => setAdvFilters({...advFilters, color: e.target.value})}>
+                    <option value="">Todas</option>
+                    {taxonomy.colors.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-600">Origem/Lote</label>
+                  <select className="w-full h-9 border border-zinc-300 rounded text-xs px-2 bg-white" value={advFilters.lot} onChange={e => setAdvFilters({...advFilters, lot: e.target.value})}>
+                    <option value="">Todos</option>
+                    {taxonomy.lots.map(l => <option key={l.id} value={l.id}>{l.sourceName}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-600">Fornecedor/Loja</label>
+                  <select className="w-full h-9 border border-zinc-300 rounded text-xs px-2 bg-white" value={advFilters.store} onChange={e => setAdvFilters({...advFilters, store: e.target.value})}>
+                    <option value="">Todos</option>
+                    {taxonomy.stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-col items-start gap-2 pt-2 border-t border-zinc-200">
+              <span className="text-xs font-semibold text-zinc-500 flex items-center gap-1.5">
+                <Filter className="w-3.5 h-3.5" /> Filtrar por etiquetas rápidas:
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {AVAILABLE_TAGS.map(tag => (
+                  <button
+                    type="button"
+                    key={tag}
+                    onClick={() => toggleFilterTag(tag)}
+                    className={`px-2.5 py-1 text-[10px] font-medium rounded-full border transition-all cursor-pointer ${
+                      filterTags.includes(tag) 
+                        ? TAG_COLORS[tag] 
+                        : "bg-white text-zinc-500 border-zinc-200 hover:bg-zinc-100 opacity-80 hover:opacity-100"
+                    }`}
+                  >
+                    {tag}
+                  </button>
+                ))}
+                {filterTags.length > 0 && (
+                  <button onClick={() => setFilterTags([])} className="px-2.5 py-1 text-[10px] font-bold text-rose-600 hover:bg-rose-50 rounded-full cursor-pointer transition-colors">
+                    Limpar Etiquetas
+                  </button>
+                )}
+              </div>
+            </div>
+
           </div>
         )}
 
