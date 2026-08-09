@@ -1,19 +1,18 @@
+// src/app/(dashboard)/dashboard/lots/page.tsx
 "use client";
 
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Layers, PlusCircle, CheckCircle2, AlertCircle, Pencil, Trash2, MapPin, Loader2, Package, TrendingUp, Camera, Tag, ArrowLeft, Search, Check, ChevronDown } from "lucide-react";
+import { Layers, PlusCircle, CheckCircle2, AlertCircle, Pencil, Trash2, MapPin, Loader2, Package, TrendingUp, Camera, Tag, ChevronDown, Search, Check, ArrowLeft, DollarSign } from "lucide-react";
 import { getLotsAction, createLotAction, updateLotAction, deleteLotAction } from "@/app/actions/lot.actions";
 import { getTaxonomyAction, createPieceAction, quickAddCategory, quickAddBrand, quickAddSize, quickAddColor, quickAddStore } from "@/app/actions/piece.actions";
 import { checkOnboardingStatusAction } from "@/app/actions/setup.actions";
 import { Lot, SourceType, Category, Brand, Size, Color, Store as StoreModel } from "@prisma/client";
-
-const SOURCE_TYPES = Object.values(SourceType);
 
 type EnrichedLot = Lot & {
   registeredPieces: number;
@@ -97,14 +96,14 @@ export default function AcquisitionsPage() {
   const [lots, setLots] = useState<EnrichedLot[]>([]);
   const [taxonomy, setTaxonomy] = useState<TaxonomyData>({ categories: [], brands: [], lots: [], sizes: [], colors: [], stores: [] });
 
-  const [open, setOpen] = useState(false);
+  const [openLotForm, setOpenLotForm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [banner, setBanner] = useState({ show: false, message: "", type: "" });
 
   const [editingLot, setEditingLot] = useState<EnrichedLot | null>(null);
   const [lotToDelete, setLotToDelete] = useState<string | null>(null);
+  const [lotStoreId, setLotStoreId] = useState("");
 
-  // Estados de Cadastro de Peças do Lote
   const [openPieceForm, setOpenPieceForm] = useState(false);
   const [targetLotForPiece, setTargetLotForPiece] = useState<EnrichedLot | null>(null);
   const [catId, setCatId] = useState(""); 
@@ -119,7 +118,7 @@ export default function AcquisitionsPage() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [quickAdd, setQuickAdd] = useState({ isOpen: false, type: "", label: "" });
+  const [quickAdd, setQuickAdd] = useState({ isOpen: false, type: "", label: "", context: "" });
   const [quickAddValue, setQuickAddValue] = useState("");
 
   const loadData = async (cid: string) => {
@@ -150,28 +149,51 @@ export default function AcquisitionsPage() {
     setTimeout(() => setBanner({ show: false, message: "", type: "" }), 5000);
   };
 
-  // --- LÓGICA DOS LOTES ---
-  const handleEditClick = (lot: EnrichedLot) => { setEditingLot(lot); setOpen(true); };
-  const handleCloseModal = (val: boolean) => { setOpen(val); if (!val) setEditingLot(null); };
+  const handleEditClick = (lot: EnrichedLot) => { 
+    setEditingLot(lot); 
+    const matchedStore = taxonomy.stores.find(s => s.name === lot.sourceName);
+    setLotStoreId(matchedStore ? matchedStore.id : "");
+    setOpenLotForm(true); 
+  };
+  
+  const handleCloseLotModal = (val: boolean) => { 
+    setOpenLotForm(val); 
+    if (!val) {
+      setEditingLot(null);
+      setLotStoreId("");
+      setQuickAdd({ isOpen: false, type: "", label: "", context: "" });
+    }
+  };
 
   async function handleLotSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (!companyId) return;
+
+    if (!lotStoreId) {
+      showBanner("Por favor, selecione ou cadastre o fornecedor/parceiro.", "error");
+      return;
+    }
+
     setLoading(true);
     const formData = new FormData(event.currentTarget);
     const dateValue = formData.get("purchaseDate") as string;
+    const storeName = taxonomy.stores.find(s => s.id === lotStoreId)?.name || "Fornecedor Indefinido";
     
     const data = {
-      code: formData.get("code") as string, purchaseDate: dateValue ? new Date(dateValue) : new Date(),
-      sourceName: formData.get("sourceName") as string, sourceType: formData.get("sourceType") as SourceType,
-      totalCost: Number(formData.get("totalCost")), quantity: Number(formData.get("quantity")), notes: formData.get("notes") as string,
+      code: editingLot ? editingLot.code : "", 
+      purchaseDate: dateValue ? new Date(dateValue) : new Date(),
+      sourceName: storeName, 
+      sourceType: "OUTRO" as SourceType, 
+      totalCost: Number(formData.get("totalCost")), 
+      quantity: Number(formData.get("quantity")), 
+      notes: formData.get("notes") as string,
     };
 
     const result = editingLot ? await updateLotAction(editingLot.id, companyId, data) : await createLotAction(companyId, data);
     setLoading(false);
 
     if (result.success) {
-      handleCloseModal(false);
-      showBanner(editingLot ? "Origem atualizada!" : "Garimpo cadastrado com sucesso!", "success");
+      handleCloseLotModal(false);
+      showBanner(editingLot ? "Lote atualizado!" : "Lote cadastrado com sucesso!", "success");
       await loadData(companyId);
     } else {
       showBanner(result.error || "Erro ao guardar.", "error");
@@ -186,13 +208,13 @@ export default function AcquisitionsPage() {
     setLotToDelete(null);
   }
 
-  // --- LÓGICA DE CADASTRO DE PEÇAS ---
   const openPieceEntry = (lot: EnrichedLot) => { setTargetLotForPiece(lot); setOpenPieceForm(true); };
   const closePieceEntry = (val: boolean) => {
     setOpenPieceForm(val);
     if (!val) {
       setCatId(""); setBrandId(""); setSizeId(""); setColorId(""); setStoreId(""); setSelectedTags([]);
       setImageFile(null); setImagePreview(null); setTargetLotForPiece(null);
+      setQuickAdd({ isOpen: false, type: "", label: "", context: "" });
     }
   };
 
@@ -207,7 +229,10 @@ export default function AcquisitionsPage() {
     else setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag).filter(t => t !== "Vendida") : [...prev, tag].filter(t => t !== "Vendida"));
   };
 
-  const triggerQuickAdd = (type: string, label: string) => { setQuickAdd({ isOpen: true, type, label }); setQuickAddValue(""); };
+  const triggerQuickAdd = (type: string, label: string, context: string) => { 
+    setQuickAdd({ isOpen: true, type, label, context }); 
+    setQuickAddValue(""); 
+  };
 
   const handleSaveQuickAdd = async () => {
     if (!quickAddValue || !companyId) return;
@@ -219,12 +244,18 @@ export default function AcquisitionsPage() {
     if (quickAdd.type === 'store') newRec = await quickAddStore(companyId, quickAddValue);
     
     await loadData(companyId); 
-    if (quickAdd.type === 'category' && newRec) setCatId(newRec.id);
-    if (quickAdd.type === 'brand' && newRec) setBrandId(newRec.id);
-    if (quickAdd.type === 'size' && newRec) setSizeId(newRec.id);
-    if (quickAdd.type === 'color' && newRec) setColorId(newRec.id);
-    if (quickAdd.type === 'store' && newRec) setStoreId(newRec.id);
-    setLoading(false); setQuickAdd({ isOpen: false, type: "", label: "" });
+    
+    if (quickAdd.context === 'lot') {
+      if (quickAdd.type === 'store' && newRec) setLotStoreId(newRec.id);
+    } else {
+      if (quickAdd.type === 'category' && newRec) setCatId(newRec.id);
+      if (quickAdd.type === 'brand' && newRec) setBrandId(newRec.id);
+      if (quickAdd.type === 'size' && newRec) setSizeId(newRec.id);
+      if (quickAdd.type === 'color' && newRec) setColorId(newRec.id);
+      if (quickAdd.type === 'store' && newRec) setStoreId(newRec.id);
+    }
+    
+    setLoading(false); setQuickAdd({ isOpen: false, type: "", label: "", context: "" });
   };
 
   async function handlePieceSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -259,7 +290,6 @@ export default function AcquisitionsPage() {
     if (result.success) { 
         showBanner("Peça adicionada ao lote!", "success"); 
         await loadData(companyId); 
-        // Prepara para a próxima peça
         setCatId(""); setBrandId(""); setSizeId(""); setColorId(""); setSelectedTags([]); setImageFile(null); setImagePreview(null);
     } else { showBanner(result.error || "Erro.", "error"); }
   }
@@ -267,12 +297,13 @@ export default function AcquisitionsPage() {
   const formatCurrency = (val: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
   const formatDate = (date: Date) => new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(new Date(date));
 
+  const fornecedoresOptions = taxonomy.stores;
+
   if (!companyId) {
     return (
       <div className="flex h-[60vh] items-center justify-center">
         <div className="flex flex-col items-center text-zinc-500">
           <Layers className="w-8 h-8 animate-pulse mb-2 text-[#1E5AA8]" />
-          <p>A carregar inteligência dos seus lotes...</p>
         </div>
       </div>
     );
@@ -290,75 +321,85 @@ export default function AcquisitionsPage() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-2">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-[#0A244A]">Garimpos & Lotes</h1>
-          <p className="text-[#4B4B4B] mt-1 text-sm md:text-base">Gere o ROI das suas idas ao brechó e compras em atacado.</p>
+          <p className="text-[#4B4B4B] mt-1 text-sm md:text-base">Gere o ROI das suas compras em atacado e lotes fechados.</p>
         </div>
 
         <div className="flex items-center w-full sm:w-auto">
-          <Dialog open={open} onOpenChange={handleCloseModal}>
+          <Dialog open={openLotForm} onOpenChange={handleCloseLotModal}>
             <DialogTrigger className="flex flex-1 sm:flex-none items-center justify-center gap-2 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white transition-colors shadow-sm h-10 px-4 rounded-md text-sm font-medium">
-              <PlusCircle className="w-4 h-4" /> Nova Ida ao Brechó
+              <PlusCircle className="w-4 h-4" /> Novo Lote
             </DialogTrigger>
-            <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 rounded-xl">
-              <DialogHeader>
-                <DialogTitle className="text-[#0A244A]">{editingLot ? "Editar Garimpo" : "Cadastrar Nova Ida ao Brechó"}</DialogTitle>
-                <DialogDescription className="text-[#4B4B4B] text-xs sm:text-sm">
-                  Quanto gastou na sacola fechada? O sistema calculará o valor médio de cada peça.
-                </DialogDescription>
-              </DialogHeader>
-
-              <form key={editingLot?.id || "new"} onSubmit={handleLotSubmit} className="space-y-5 pt-2">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label htmlFor="sourceName" className="text-[#0A244A]">Onde você foi?</Label>
-                    <Input id="sourceName" name="sourceName" placeholder="Ex: Brechó da Maria" defaultValue={editingLot?.sourceName || ""} required autoFocus className="h-10" />
+            <DialogContent className="w-[95vw] sm:max-w-xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 rounded-xl">
+              {quickAdd.isOpen && quickAdd.context === 'lot' ? (
+                <div className="space-y-6 py-2">
+                  <div className="flex items-center gap-2 mb-4">
+                    <button onClick={() => setQuickAdd({ isOpen: false, type: "", label: "", context: "" })} className="p-2 hover:bg-zinc-100 rounded-full transition-colors cursor-pointer">
+                      <ArrowLeft className="w-5 h-5 text-zinc-600" />
+                    </button>
+                    <div><DialogTitle className="text-[#0A244A]">Cadastrar Fornecedor</DialogTitle></div>
                   </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="sourceType" className="text-[#0A244A]">Tipo</Label>
-                    <select id="sourceType" name="sourceType" defaultValue={editingLot?.sourceType || ""} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm focus:border-[#1E5AA8] outline-none" required>
-                      <option value="">Selecione...</option>
-                      {SOURCE_TYPES.map(type => (
-                        <option key={type} value={type}>{type.replace(/_/g, ' ')}</option>
-                      ))}
-                    </select>
+                  <div className="space-y-2">
+                    <Label className="text-[#0A244A]">Nome do {quickAdd.label}</Label>
+                    <Input autoFocus value={quickAddValue} onChange={(e) => setQuickAddValue(e.target.value)} />
                   </div>
+                  <Button onClick={handleSaveQuickAdd} className="w-full bg-[#1E5AA8] hover:bg-[#103A73] text-white" disabled={loading || !quickAddValue}>
+                    {loading ? "A processar..." : "Salvar e Voltar"}
+                  </Button>
                 </div>
+              ) : (
+                <>
+                  <DialogHeader>
+                    <DialogTitle className="text-[#0A244A]">{editingLot ? "Editar Lote" : "Novo Lote"}</DialogTitle>
+                    <DialogDescription className="text-[#4B4B4B] text-xs sm:text-sm">
+                      Insira o fornecedor e quanto pagou na sacola fechada.
+                    </DialogDescription>
+                  </DialogHeader>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label htmlFor="code" className="text-[#0A244A]">Código Lote/NF (Opcional)</Label>
-                    <Input id="code" name="code" placeholder="Gerado auto se vazio" defaultValue={editingLot?.code || ""} className="h-10" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="purchaseDate" className="text-[#0A244A]">Quando foi?</Label>
-                    <Input id="purchaseDate" name="purchaseDate" type="date" defaultValue={editingLot ? new Date(editingLot.purchaseDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]} required className="h-10" />
-                  </div>
-                </div>
+                  <form key={editingLot?.id || "new"} onSubmit={handleLotSubmit} className="space-y-5 pt-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <Label className="text-[#0A244A]">Onde você foi? (Fornecedor)</Label>
+                        <SearchableSelect 
+                          value={lotStoreId} 
+                          onChange={setLotStoreId} 
+                          options={fornecedoresOptions} 
+                          placeholder="Selecione o fornecedor..." 
+                          newItemLabel="Cadastrar Fornecedor" 
+                          onAddNew={() => triggerQuickAdd('store', 'Fornecedor', 'lot')} 
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="purchaseDate" className="text-[#0A244A]">Data do Garimpo</Label>
+                        <Input id="purchaseDate" name="purchaseDate" type="date" defaultValue={editingLot ? new Date(editingLot.purchaseDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]} required className="h-10" />
+                      </div>
+                    </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-[#1E5AA8]/5 p-4 border border-[#1E5AA8]/20 rounded-lg">
-                  <div className="space-y-1">
-                    <Label htmlFor="quantity" className="text-[#0A244A] font-bold">Quantas peças trouxe?</Label>
-                    <Input id="quantity" name="quantity" type="number" min="1" placeholder="Ex: 50" defaultValue={editingLot?.quantity || ""} required className="h-10 bg-white" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="totalCost" className="text-[#0A244A] font-bold">Quanto pagou em tudo? (R$)</Label>
-                    <Input id="totalCost" name="totalCost" type="number" step="0.01" min="0" placeholder="Ex: 250.00" defaultValue={editingLot?.totalCost || ""} required className="h-10 bg-white" />
-                  </div>
-                </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-[#1E5AA8]/5 p-4 border border-[#1E5AA8]/20 rounded-lg">
+                      <div className="space-y-1">
+                        <Label htmlFor="quantity" className="text-[#0A244A] font-bold">Total de Peças na Sacola</Label>
+                        <Input id="quantity" name="quantity" type="number" min="1" placeholder="Ex: 50" defaultValue={editingLot?.quantity || ""} required className="h-10 bg-white" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="totalCost" className="text-[#0A244A] font-bold">Custo Total Pago (R$)</Label>
+                        <Input id="totalCost" name="totalCost" type="number" step="0.01" min="0" placeholder="Ex: 250.00" defaultValue={editingLot?.totalCost || ""} required className="h-10 bg-white" />
+                      </div>
+                    </div>
 
-                <div className="space-y-1">
-                  <Label htmlFor="notes" className="text-[#0A244A]">Observações (Opcional)</Label>
-                  <Input id="notes" name="notes" placeholder="Ex: Foco em roupas de inverno..." defaultValue={editingLot?.notes || ""} className="h-10" />
-                </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="notes" className="text-[#0A244A]">Observações (Opcional)</Label>
+                      <Input id="notes" name="notes" placeholder="Ex: Foco em roupas de inverno..." defaultValue={editingLot?.notes || ""} className="h-10" />
+                    </div>
 
-                <Button type="submit" className="w-full mt-2 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white h-12 text-base shadow-sm font-medium flex items-center justify-center gap-2" disabled={loading}>
-                  {loading && <Loader2 className="w-5 h-5 animate-spin" />}
-                  {loading ? "A processar..." : (editingLot ? "Salvar Alterações" : "Salvar Ida ao Brechó")}
-                </Button>
-              </form>
+                    <Button type="submit" className="w-full mt-2 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white h-12 text-base shadow-sm font-medium flex items-center justify-center gap-2" disabled={loading}>
+                      {loading && <Loader2 className="w-5 h-5 animate-spin" />}
+                      {loading ? "A processar..." : "Salvar Lote"}
+                    </Button>
+                  </form>
+                </>
+              )}
             </DialogContent>
           </Dialog>
 
-          {/* Modal de Exclusão do Lote */}
           <Dialog open={!!lotToDelete} onOpenChange={(val) => !val && setLotToDelete(null)}>
             <DialogContent className="w-[90vw] sm:max-w-md rounded-xl">
               <DialogHeader>
@@ -378,18 +419,15 @@ export default function AcquisitionsPage() {
             </DialogContent>
           </Dialog>
 
-          {/* NOVO MODAL: LANÇAMENTO RÁPIDO DE PEÇAS NO LOTE */}
           <Dialog open={openPieceForm} onOpenChange={closePieceEntry}>
             <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 rounded-xl">
-              {quickAdd.isOpen ? (
+              {quickAdd.isOpen && quickAdd.context === 'piece' ? (
                 <div className="space-y-6 py-2">
                   <div className="flex items-center gap-2 mb-4">
-                    <button onClick={() => setQuickAdd({ isOpen: false, type: "", label: "" })} className="p-2 hover:bg-zinc-100 rounded-full transition-colors cursor-pointer">
+                    <button onClick={() => setQuickAdd({ isOpen: false, type: "", label: "", context: "" })} className="p-2 hover:bg-zinc-100 rounded-full transition-colors cursor-pointer">
                       <ArrowLeft className="w-5 h-5 text-zinc-600" />
                     </button>
-                    <div>
-                      <DialogTitle className="text-[#0A244A]">Novo Cadastro</DialogTitle>
-                    </div>
+                    <div><DialogTitle className="text-[#0A244A]">Novo Cadastro</DialogTitle></div>
                   </div>
                   <div className="space-y-2">
                     <Label className="text-[#0A244A]">Nome da {quickAdd.label}</Label>
@@ -419,12 +457,12 @@ export default function AcquisitionsPage() {
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
-                      <div><Label>Categoria</Label><SearchableSelect value={catId} onChange={setCatId} options={taxonomy.categories} placeholder="Selecione" newItemLabel="Nova Categoria" onAddNew={() => triggerQuickAdd('category', 'Categoria')} /></div>
-                      <div><Label>Marca</Label><SearchableSelect value={brandId} onChange={setBrandId} options={taxonomy.brands} placeholder="Selecione" newItemLabel="Nova Marca" onAddNew={() => triggerQuickAdd('brand', 'Marca')} /></div>
+                      <div><Label>Categoria</Label><SearchableSelect value={catId} onChange={setCatId} options={taxonomy.categories} placeholder="Selecione" newItemLabel="Nova Categoria" onAddNew={() => triggerQuickAdd('category', 'Categoria', 'piece')} /></div>
+                      <div><Label>Marca</Label><SearchableSelect value={brandId} onChange={setBrandId} options={taxonomy.brands} placeholder="Selecione" newItemLabel="Nova Marca" onAddNew={() => triggerQuickAdd('brand', 'Marca', 'piece')} /></div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
-                      <div><Label>Tamanho</Label><SearchableSelect value={sizeId} onChange={setSizeId} options={taxonomy.sizes} placeholder="Selecione" newItemLabel="Novo Tamanho" onAddNew={() => triggerQuickAdd('size', 'Tamanho')} /></div>
-                      <div><Label>Cor</Label><SearchableSelect value={colorId} onChange={setColorId} options={taxonomy.colors} placeholder="Selecione" newItemLabel="Nova Cor" onAddNew={() => triggerQuickAdd('color', 'Cor')} /></div>
+                      <div><Label>Tamanho</Label><SearchableSelect value={sizeId} onChange={setSizeId} options={taxonomy.sizes} placeholder="Selecione" newItemLabel="Novo Tamanho" onAddNew={() => triggerQuickAdd('size', 'Tamanho', 'piece')} /></div>
+                      <div><Label>Cor</Label><SearchableSelect value={colorId} onChange={setColorId} options={taxonomy.colors} placeholder="Selecione" newItemLabel="Nova Cor" onAddNew={() => triggerQuickAdd('color', 'Cor', 'piece')} /></div>
                     </div>
                     <div className="space-y-3 bg-zinc-50 border border-zinc-200 rounded-lg p-4">
                       <Label className="flex items-center gap-2"><Tag className="w-4 h-4" /> Etiquetas (Estado Atual)</Label>
@@ -434,14 +472,14 @@ export default function AcquisitionsPage() {
                         ))}
                       </div>
                       {selectedTags.includes("Em consignação") && (
-                         <div className="mt-4 pt-4 border-t"><Label>Parceiro (Consignação)</Label><SearchableSelect value={storeId} onChange={setStoreId} options={taxonomy.stores} placeholder="Onde está a peça?" newItemLabel="Novo Parceiro" onAddNew={() => triggerQuickAdd('store', 'Parceiro')} /></div>
+                         <div className="mt-4 pt-4 border-t"><Label>Parceiro (Consignação)</Label><SearchableSelect value={storeId} onChange={setStoreId} options={taxonomy.stores} placeholder="Onde está a peça?" newItemLabel="Novo Parceiro" onAddNew={() => triggerQuickAdd('store', 'Parceiro', 'piece')} /></div>
                       )}
                       {selectedTags.includes("Vendida") && (
                          <div className="mt-4 pt-4 border-t"><Label>Valor Efetivo da Venda (R$)</Label><Input name="salePrice" type="number" step="0.01" required /></div>
                       )}
                     </div>
                     <div><Label>Observações</Label><Input name="observations" placeholder="Fio puxado, mancha pequena..." /></div>
-                    <Button type="submit" className="w-full bg-[#1E5AA8] h-12 flex gap-2 font-medium" disabled={loading || isUploading}>
+                    <Button type="submit" className="w-full bg-[#1E5AA8] h-12 flex gap-2 font-medium cursor-pointer" disabled={loading || isUploading}>
                       {(loading || isUploading) && <Loader2 className="w-5 h-5 animate-spin" />}
                       {isUploading ? "A enviar foto..." : "Salvar e Continuar Lançando"}
                     </Button>
@@ -458,17 +496,18 @@ export default function AcquisitionsPage() {
         {lots.length === 0 ? (
           <div className="p-12 md:p-16 text-center flex flex-col items-center justify-center">
             <Layers className="w-12 h-12 text-[#1E5AA8]/30 mb-4" />
-            <h3 className="text-lg font-semibold text-[#0A244A]">Nenhum garimpo registado</h3>
+            <h3 className="text-lg font-semibold text-[#0A244A]">Nenhum lote registado</h3>
             <p className="text-sm text-[#4B4B4B] max-w-sm mt-1">
-              Sempre que voltar do brechó com uma sacola, registe aqui para descobrir o seu custo médio e lucros!
+              Sempre que voltar do brechó ou fornecedor com uma sacola, registe o lote aqui!
             </p>
           </div>
         ) : (
           <>
-            {/* VISTA MOBILE */}
             <div className="md:hidden flex flex-col divide-y divide-zinc-100">
               {lots.map((lot) => {
-                const percent = Math.min((lot.registeredPieces / lot.quantity) * 100, 100);
+                const piecesPercent = Math.min((lot.registeredPieces / lot.quantity) * 100, 100);
+                const roiPercent = lot.totalCost > 0 ? (lot.expectedRevenue / lot.totalCost) * 100 : 100;
+                const roiCapped = Math.min(roiPercent, 100);
                 
                 return (
                   <div key={lot.id} className="p-4 flex flex-col gap-3 hover:bg-zinc-50 transition-colors">
@@ -478,7 +517,7 @@ export default function AcquisitionsPage() {
                         <div className="flex flex-wrap items-center gap-2 mt-1.5">
                           <span className="text-[10px] text-zinc-500 font-medium bg-zinc-100 px-1.5 py-0.5 rounded">{formatDate(lot.purchaseDate)}</span>
                           <span className="text-[10px] text-zinc-500 flex items-center gap-1 bg-zinc-50 border border-zinc-200 px-1.5 py-0.5 rounded-sm">
-                            <MapPin className="w-3 h-3" /> {lot.sourceType.replace(/_/g, ' ')}
+                            <MapPin className="w-3 h-3" /> Lote
                           </span>
                         </div>
                       </div>
@@ -492,39 +531,47 @@ export default function AcquisitionsPage() {
                       </div>
                     </div>
 
-                    {/* Dashboard Miniatura */}
                     <div className="mt-1 bg-zinc-50 border border-zinc-200 rounded-lg p-3 shadow-sm">
                       <div className="flex justify-between items-center mb-1.5">
                         <span className="text-[10px] uppercase font-bold text-zinc-500 flex items-center gap-1">
-                          <Package className="w-3 h-3"/> Triagem das Peças
+                          <Package className="w-3 h-3"/> Triagem (Quant.)
                         </span>
-                        <span className="text-[10px] font-bold text-[#0A244A]">{lot.registeredPieces} de {lot.quantity} cadastradas</span>
+                        <span className="text-[10px] font-bold text-[#0A244A]">{lot.registeredPieces} de {lot.quantity}</span>
                       </div>
                       <div className="w-full h-1.5 bg-zinc-200 rounded-full overflow-hidden">
-                        <div className={`h-full rounded-full ${percent === 100 ? 'bg-emerald-500' : 'bg-[#1E5AA8]'}`} style={{ width: `${percent}%` }} />
+                        <div className={`h-full rounded-full ${piecesPercent === 100 ? 'bg-emerald-500' : 'bg-[#1E5AA8]'}`} style={{ width: `${piecesPercent}%` }} />
+                      </div>
+
+                      <div className="flex justify-between items-center mb-1.5 mt-3">
+                        <span className="text-[10px] uppercase font-bold text-zinc-500 flex items-center gap-1">
+                          <DollarSign className="w-3 h-3"/> Retorno do Invest.
+                        </span>
+                        <span className={`text-[10px] font-bold ${roiPercent >= 100 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                          {formatCurrency(lot.expectedRevenue)} / {formatCurrency(lot.totalCost)}
+                        </span>
+                      </div>
+                      <div className="w-full h-1.5 bg-zinc-200 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${roiPercent >= 100 ? 'bg-emerald-500' : 'bg-amber-400'}`} style={{ width: `${roiCapped}%` }} />
                       </div>
                       
                       <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-zinc-100">
                          <div>
-                            <span className="flex text-[9px] uppercase text-zinc-500 font-semibold items-center gap-1 mb-0.5">Valor Pago</span>
-                            <p className="font-bold text-[#0A244A] text-xs">{formatCurrency(lot.totalCost)}</p>
-                            <p className="text-[9px] text-rose-600 font-medium mt-0.5">{formatCurrency(lot.averageCost)} /peça</p>
+                            <span className="flex text-[9px] uppercase text-zinc-500 font-semibold items-center gap-1 mb-0.5">Custo Médio</span>
+                            <p className="font-bold text-rose-600 text-xs">{formatCurrency(lot.averageCost)} /peça</p>
                          </div>
                          <div className="text-right">
                             <span className="flex justify-end text-[9px] uppercase text-zinc-500 font-semibold items-center gap-1 mb-0.5">
-                              Lucro Previsto <TrendingUp className="w-3 h-3 text-emerald-500"/>
+                              Lucro Final <TrendingUp className="w-3 h-3 text-emerald-500"/>
                             </span>
                             <p className={`font-bold text-xs ${lot.expectedProfit > 0 ? 'text-emerald-600' : 'text-zinc-500'}`}>
                               {formatCurrency(lot.expectedProfit)}
                             </p>
-                            <p className="text-[9px] text-zinc-500 mt-0.5">Estimativa: {formatCurrency(lot.expectedRevenue)}</p>
                          </div>
                       </div>
 
-                      {/* Botão Gigante de Lançar Peças */}
                       <div className="mt-4 pt-3 border-t border-zinc-200">
                          <Button onClick={() => openPieceEntry(lot)} className="w-full bg-[#1E5AA8] hover:bg-[#103A73] text-white flex gap-2 h-11 cursor-pointer font-bold">
-                            <PlusCircle className="w-4 h-4"/> LANÇAR PEÇA DESTE LOTE
+                            <PlusCircle className="w-4 h-4"/> LANÇAR PEÇA DO LOTE
                          </Button>
                       </div>
                     </div>
@@ -540,76 +587,81 @@ export default function AcquisitionsPage() {
               })}
             </div>
 
-            {/* VISTA DESKTOP */}
-            <div className="hidden md:block overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead className="font-semibold">Origem / Data</TableHead>
-                    <TableHead className="font-semibold w-48">Progresso do Garimpo</TableHead>
-                    <TableHead className="text-right font-semibold">Custo Total</TableHead>
-                    <TableHead className="text-right font-semibold">Custo/Peça</TableHead>
-                    <TableHead className="text-right font-semibold">Lucro Potencial</TableHead>
-                    <TableHead className="text-right w-44 font-semibold">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {lots.map((lot) => {
-                    const percent = Math.min((lot.registeredPieces / lot.quantity) * 100, 100);
+            <div className="hidden md:block overflow-x-auto p-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {lots.map(lot => {
+                  const piecesPercent = Math.min((lot.registeredPieces / lot.quantity) * 100, 100);
+                  const roiPercent = lot.totalCost > 0 ? (lot.expectedRevenue / lot.totalCost) * 100 : 100;
+                  const roiCapped = Math.min(roiPercent, 100);
 
-                    return (
-                      <TableRow key={lot.id} className="hover:bg-zinc-50/80 transition-colors">
-                        <TableCell>
-                          <div className="flex flex-col">
-                            <span className="font-semibold text-[#0A244A]">{lot.sourceName}</span>
-                            <span className="text-[11px] text-zinc-500 mt-0.5">
-                              {formatDate(lot.purchaseDate)} • {lot.code}
-                            </span>
-                            {lot.notes && (
-                              <span className="text-[10px] text-amber-600 flex items-center gap-1 font-medium mt-1">
-                                <AlertCircle className="w-3 h-3 shrink-0" /> {lot.notes}
-                              </span>
-                            )}
+                  return (
+                    <div key={lot.id} className="bg-white rounded-xl border border-zinc-200 p-5 shadow-sm hover:shadow-md transition-shadow flex flex-col">
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <h3 className="font-bold text-[#0A244A] text-lg leading-tight">{lot.sourceName}</h3>
+                            <p className="text-[11px] text-zinc-500 mt-1">{formatDate(lot.purchaseDate)}</p>
                           </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col gap-1.5">
-                            <div className="flex justify-between text-[11px] font-medium text-zinc-600">
-                              <span>{lot.registeredPieces} cadastradas</span>
-                              <span>{lot.quantity} total</span>
+                          <div className="flex gap-1">
+                            <button onClick={() => handleEditClick(lot)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded cursor-pointer"><Pencil className="w-3.5 h-3.5"/></button>
+                            <button onClick={() => setLotToDelete(lot.id)} className="p-1.5 text-rose-600 hover:bg-rose-50 rounded cursor-pointer"><Trash2 className="w-3.5 h-3.5"/></button>
+                          </div>
+                        </div>
+
+                        {lot.notes && (
+                          <div className="mb-4 bg-amber-50 px-2 py-1.5 rounded-md text-[11px] text-amber-700 flex items-start gap-1.5 border border-amber-100">
+                            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                            <span className="leading-tight">{lot.notes}</span>
+                          </div>
+                        )}
+
+                        <div className="bg-zinc-50 rounded-lg p-4 mb-4 border border-zinc-100 space-y-4">
+                          
+                          <div>
+                            <div className="flex justify-between mb-1.5">
+                              <span className="text-[10px] font-bold text-zinc-500 flex items-center gap-1"><Package className="w-3.5 h-3.5"/> Qtd. Peças</span>
+                              <span className="text-[10px] font-bold text-[#0A244A]">{lot.registeredPieces} / {lot.quantity}</span>
                             </div>
                             <div className="w-full h-1.5 bg-zinc-200 rounded-full overflow-hidden">
-                              <div className={`h-full rounded-full ${percent === 100 ? 'bg-emerald-500' : 'bg-[#1E5AA8]'}`} style={{ width: `${percent}%` }} />
+                              <div className={`h-full ${piecesPercent === 100 ? 'bg-emerald-500' : 'bg-[#1E5AA8]'}`} style={{width: `${piecesPercent}%`}}></div>
                             </div>
                           </div>
-                        </TableCell>
-                        <TableCell className="font-bold text-[#0A244A] text-right">
-                          {formatCurrency(lot.totalCost)}
-                        </TableCell>
-                        <TableCell className="font-semibold text-rose-600 text-right">
-                          {formatCurrency(lot.averageCost)}
-                        </TableCell>
-                        <TableCell className={`font-bold text-right ${lot.expectedProfit > 0 ? 'text-emerald-600' : 'text-zinc-500'}`}>
-                          {lot.expectedProfit > 0 && '+'}{formatCurrency(lot.expectedProfit)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-1.5">
-                            <button onClick={() => openPieceEntry(lot)} className="px-3 py-1.5 text-xs font-bold text-white bg-[#1E5AA8] hover:bg-[#103A73] rounded-md transition-all cursor-pointer flex items-center gap-1" title="Lançar Peça">
-                              <PlusCircle className="w-3.5 h-3.5" /> Lançar Peça
-                            </button>
-                            <button onClick={() => handleEditClick(lot)} className="p-2 text-zinc-400 hover:text-[#1E5AA8] hover:bg-blue-50 rounded-md transition-all cursor-pointer" title="Editar Lote">
-                              <Pencil className="w-4 h-4" />
-                            </button>
-                            <button onClick={() => setLotToDelete(lot.id)} className="p-2 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-all cursor-pointer" title="Excluir Lote">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+
+                          <div>
+                            <div className="flex justify-between mb-1.5">
+                              <span className="text-[10px] font-bold text-zinc-500 flex items-center gap-1"><DollarSign className="w-3.5 h-3.5"/> Retorno (ROI)</span>
+                              <span className={`text-[10px] font-bold ${roiPercent >= 100 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                {formatCurrency(lot.expectedRevenue)} / {formatCurrency(lot.totalCost)}
+                              </span>
+                            </div>
+                            <div className="w-full h-1.5 bg-zinc-200 rounded-full overflow-hidden">
+                              <div className={`h-full ${roiPercent >= 100 ? 'bg-emerald-500' : 'bg-amber-400'}`} style={{width: `${roiCapped}%`}}></div>
+                            </div>
                           </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+
+                          <div className="grid grid-cols-2 gap-2 pt-3 border-t border-zinc-200">
+                              <div>
+                                <p className="text-[9px] text-zinc-500 uppercase font-bold">Custo Médio</p>
+                                <p className="font-bold text-rose-600 text-xs mt-0.5">{formatCurrency(lot.averageCost)}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-[9px] text-zinc-500 uppercase font-bold flex justify-end gap-1 items-center">Lucro <TrendingUp className="w-3 h-3 text-emerald-500"/></p>
+                                <p className={`font-bold text-xs mt-0.5 ${lot.expectedProfit > 0 ? 'text-emerald-600' : 'text-zinc-500'}`}>{formatCurrency(lot.expectedProfit)}</p>
+                              </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-auto pt-2 border-t border-zinc-100 flex gap-2">
+                          <Link href={`/dashboard/inventory?filterLot=${lot.id}`} className="flex-1 flex items-center justify-center gap-1.5 bg-white border border-zinc-300 text-zinc-700 hover:bg-zinc-50 text-xs font-semibold py-2 rounded-md transition-colors cursor-pointer">
+                            <Package className="w-4 h-4" /> Estoque
+                          </Link>
+                          <Button onClick={() => openPieceEntry(lot)} className="flex-2 bg-[#1E5AA8] hover:bg-[#103A73] text-white flex gap-1.5 h-auto py-2 cursor-pointer font-bold text-xs">
+                            <PlusCircle className="w-4 h-4"/> Lançar Peça
+                          </Button>
+                        </div>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           </>
         )}
