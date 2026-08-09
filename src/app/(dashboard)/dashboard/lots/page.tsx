@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Layers, PlusCircle, CheckCircle2, AlertCircle, Pencil, Trash2, MapPin, Loader2, Package, TrendingUp, Camera, Tag, ChevronDown, Search, Check, ArrowLeft, DollarSign } from "lucide-react";
 import { getLotsAction, createLotAction, updateLotAction, deleteLotAction } from "@/app/actions/lot.actions";
-import { getTaxonomyAction, createPieceAction, quickAddCategory, quickAddBrand, quickAddSize, quickAddColor, quickAddStore } from "@/app/actions/piece.actions";
+import { getTaxonomyAction, createPieceAction, quickAddCategory, quickAddBrand, quickAddSize, quickAddColor } from "@/app/actions/piece.actions";
+import { createStoreAction } from "@/app/actions/store.actions";
 import { checkOnboardingStatusAction } from "@/app/actions/setup.actions";
 import { Lot, SourceType, Category, Brand, Size, Color, Store as StoreModel } from "@prisma/client";
 
@@ -169,7 +170,7 @@ export default function AcquisitionsPage() {
     event.preventDefault(); if (!companyId) return;
 
     if (!lotStoreId) {
-      showBanner("Por favor, selecione ou cadastre o fornecedor/parceiro.", "error");
+      showBanner("Por favor, selecione ou cadastre o fornecedor.", "error");
       return;
     }
 
@@ -193,7 +194,7 @@ export default function AcquisitionsPage() {
 
     if (result.success) {
       handleCloseLotModal(false);
-      showBanner(editingLot ? "Lote atualizado!" : "Lote cadastrado com sucesso!", "success");
+      showBanner(editingLot ? "Lote atualizado!" : "Lote salvo com sucesso!", "success");
       await loadData(companyId);
     } else {
       showBanner(result.error || "Erro ao guardar.", "error");
@@ -203,7 +204,7 @@ export default function AcquisitionsPage() {
   async function confirmDelete() {
     if (!lotToDelete || !companyId) return;
     setLoading(true); const result = await deleteLotAction(lotToDelete, companyId); setLoading(false);
-    if (result.success) { showBanner("Excluída com sucesso!", "success"); await loadData(companyId); }
+    if (result.success) { showBanner("Excluído com sucesso!", "success"); await loadData(companyId); }
     else { showBanner(result.error || "Erro ao excluir.", "error"); }
     setLotToDelete(null);
   }
@@ -241,22 +242,56 @@ export default function AcquisitionsPage() {
     if (quickAdd.type === 'brand') newRec = await quickAddBrand(companyId, quickAddValue);
     if (quickAdd.type === 'size') newRec = await quickAddSize(companyId, quickAddValue);
     if (quickAdd.type === 'color') newRec = await quickAddColor(companyId, quickAddValue);
-    if (quickAdd.type === 'store') newRec = await quickAddStore(companyId, quickAddValue);
     
     await loadData(companyId); 
     
     if (quickAdd.context === 'lot') {
-      if (quickAdd.type === 'store' && newRec) setLotStoreId(newRec.id);
+      // Como store agora é um formulário completo separado, este bloco não roda para lote/store
     } else {
       if (quickAdd.type === 'category' && newRec) setCatId(newRec.id);
       if (quickAdd.type === 'brand' && newRec) setBrandId(newRec.id);
       if (quickAdd.type === 'size' && newRec) setSizeId(newRec.id);
       if (quickAdd.type === 'color' && newRec) setColorId(newRec.id);
-      if (quickAdd.type === 'store' && newRec) setStoreId(newRec.id);
     }
     
     setLoading(false); setQuickAdd({ isOpen: false, type: "", label: "", context: "" });
   };
+
+  async function handleSaveStore(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!companyId) return;
+    setLoading(true);
+    
+    const formData = new FormData(event.currentTarget);
+    const data = {
+      name: formData.get("name") as string,
+      type: formData.get("type") as string,
+      phone: formData.get("phone") as string,
+      address: formData.get("address") as string,
+      email: "",
+      commissionPercentage: 0,
+      notes: ""
+    };
+    
+    const result = await createStoreAction(companyId, data);
+    
+    if (result.success) {
+      await loadData(companyId);
+      // Pega o ID da nova loja criada para setar no formulário
+      const tData = await getTaxonomyAction(companyId);
+      const newStore = tData.stores.find((s: StoreModel) => s.name === data.name);
+      
+      if (newStore) {
+        if (quickAdd.context === 'lot') setLotStoreId(newStore.id);
+        if (quickAdd.context === 'piece') setStoreId(newStore.id);
+      }
+    } else {
+      showBanner(result.error || "Erro ao cadastrar fornecedor.", "error");
+    }
+    
+    setLoading(false);
+    setQuickAdd({ isOpen: false, type: "", label: "", context: "" });
+  }
 
   async function handlePieceSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (!companyId || !targetLotForPiece) return;
@@ -299,6 +334,63 @@ export default function AcquisitionsPage() {
 
   const fornecedoresOptions = taxonomy.stores;
 
+  // --- COMPONENTES DE RENDERIZAÇÃO CONDICIONAL ---
+  const storeFormContent = (
+    <form onSubmit={handleSaveStore} className="space-y-4 py-2">
+      <div className="flex items-center gap-2 mb-4">
+        <button type="button" onClick={() => setQuickAdd({ isOpen: false, type: "", label: "", context: "" })} className="p-2 hover:bg-zinc-100 rounded-full transition-colors cursor-pointer">
+          <ArrowLeft className="w-5 h-5 text-zinc-600" />
+        </button>
+        <div><DialogTitle className="text-[#0A244A]">Cadastrar Fornecedor</DialogTitle></div>
+      </div>
+      <div className="space-y-3">
+        <div>
+          <Label className="text-[#0A244A]">Nome</Label>
+          <Input name="name" autoFocus required />
+        </div>
+        <div>
+          <Label className="text-[#0A244A]">Tipo</Label>
+          <select name="type" className="w-full h-10 border border-zinc-200 rounded-md px-3 bg-white text-sm outline-none focus:border-[#1E5AA8]" required>
+            <option value="Brechó">Brechó</option>
+            <option value="Bazar">Bazar</option>
+            <option value="Igreja">Igreja</option>
+            <option value="Atacado">Atacado</option>
+            <option value="Fornecedor">Outro</option>
+          </select>
+        </div>
+        <div>
+          <Label className="text-[#0A244A]">WhatsApp</Label>
+          <Input name="phone" />
+        </div>
+        <div>
+          <Label className="text-[#0A244A]">Endereço</Label>
+          <Input name="address" />
+        </div>
+      </div>
+      <Button type="submit" className="w-full bg-[#1E5AA8] hover:bg-[#103A73] text-white mt-4" disabled={loading}>
+        {loading ? "A processar..." : "Salvar"}
+      </Button>
+    </form>
+  );
+
+  const genericQuickAddContent = (
+    <div className="space-y-6 py-2">
+      <div className="flex items-center gap-2 mb-4">
+        <button onClick={() => setQuickAdd({ isOpen: false, type: "", label: "", context: "" })} className="p-2 hover:bg-zinc-100 rounded-full transition-colors cursor-pointer">
+          <ArrowLeft className="w-5 h-5 text-zinc-600" />
+        </button>
+        <div><DialogTitle className="text-[#0A244A]">Novo Cadastro</DialogTitle></div>
+      </div>
+      <div className="space-y-2">
+        <Label className="text-[#0A244A]">Nome da {quickAdd.label}</Label>
+        <Input autoFocus value={quickAddValue} onChange={(e) => setQuickAddValue(e.target.value)} />
+      </div>
+      <Button onClick={handleSaveQuickAdd} className="w-full bg-[#1E5AA8] hover:bg-[#103A73] text-white" disabled={loading || !quickAddValue}>
+        {loading ? "A processar..." : "Salvar"}
+      </Button>
+    </div>
+  );
+
   if (!companyId) {
     return (
       <div className="flex h-[60vh] items-center justify-center">
@@ -320,8 +412,8 @@ export default function AcquisitionsPage() {
 
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-2">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-[#0A244A]">Garimpos & Lotes</h1>
-          <p className="text-[#4B4B4B] mt-1 text-sm md:text-base">Gere o ROI das suas compras em atacado e lotes fechados.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-[#0A244A]">Lotes</h1>
+          <p className="text-[#4B4B4B] mt-1 text-sm md:text-base">Registre suas sacolas fechadas e acompanhe se o valor pago já voltou para o seu bolso.</p>
         </div>
 
         <div className="flex items-center w-full sm:w-auto">
@@ -331,34 +423,17 @@ export default function AcquisitionsPage() {
             </DialogTrigger>
             <DialogContent className="w-[95vw] sm:max-w-xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 rounded-xl">
               {quickAdd.isOpen && quickAdd.context === 'lot' ? (
-                <div className="space-y-6 py-2">
-                  <div className="flex items-center gap-2 mb-4">
-                    <button onClick={() => setQuickAdd({ isOpen: false, type: "", label: "", context: "" })} className="p-2 hover:bg-zinc-100 rounded-full transition-colors cursor-pointer">
-                      <ArrowLeft className="w-5 h-5 text-zinc-600" />
-                    </button>
-                    <div><DialogTitle className="text-[#0A244A]">Cadastrar Fornecedor</DialogTitle></div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-[#0A244A]">Nome do {quickAdd.label}</Label>
-                    <Input autoFocus value={quickAddValue} onChange={(e) => setQuickAddValue(e.target.value)} />
-                  </div>
-                  <Button onClick={handleSaveQuickAdd} className="w-full bg-[#1E5AA8] hover:bg-[#103A73] text-white" disabled={loading || !quickAddValue}>
-                    {loading ? "A processar..." : "Salvar e Voltar"}
-                  </Button>
-                </div>
+                quickAdd.type === 'store' ? storeFormContent : genericQuickAddContent
               ) : (
                 <>
                   <DialogHeader>
                     <DialogTitle className="text-[#0A244A]">{editingLot ? "Editar Lote" : "Novo Lote"}</DialogTitle>
-                    <DialogDescription className="text-[#4B4B4B] text-xs sm:text-sm">
-                      Insira o fornecedor e quanto pagou na sacola fechada.
-                    </DialogDescription>
                   </DialogHeader>
 
                   <form key={editingLot?.id || "new"} onSubmit={handleLotSubmit} className="space-y-5 pt-2">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-1">
-                        <Label className="text-[#0A244A]">Onde você foi? (Fornecedor)</Label>
+                        <Label className="text-[#0A244A]">Fornecedor</Label>
                         <SearchableSelect 
                           value={lotStoreId} 
                           onChange={setLotStoreId} 
@@ -369,7 +444,7 @@ export default function AcquisitionsPage() {
                         />
                       </div>
                       <div className="space-y-1">
-                        <Label htmlFor="purchaseDate" className="text-[#0A244A]">Data do Garimpo</Label>
+                        <Label htmlFor="purchaseDate" className="text-[#0A244A]">Data</Label>
                         <Input id="purchaseDate" name="purchaseDate" type="date" defaultValue={editingLot ? new Date(editingLot.purchaseDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]} required className="h-10" />
                       </div>
                     </div>
@@ -386,7 +461,7 @@ export default function AcquisitionsPage() {
                     </div>
 
                     <div className="space-y-1">
-                      <Label htmlFor="notes" className="text-[#0A244A]">Observações (Opcional)</Label>
+                      <Label htmlFor="notes" className="text-[#0A244A]">Observações</Label>
                       <Input id="notes" name="notes" placeholder="Ex: Foco em roupas de inverno..." defaultValue={editingLot?.notes || ""} className="h-10" />
                     </div>
 
@@ -422,21 +497,7 @@ export default function AcquisitionsPage() {
           <Dialog open={openPieceForm} onOpenChange={closePieceEntry}>
             <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 rounded-xl">
               {quickAdd.isOpen && quickAdd.context === 'piece' ? (
-                <div className="space-y-6 py-2">
-                  <div className="flex items-center gap-2 mb-4">
-                    <button onClick={() => setQuickAdd({ isOpen: false, type: "", label: "", context: "" })} className="p-2 hover:bg-zinc-100 rounded-full transition-colors cursor-pointer">
-                      <ArrowLeft className="w-5 h-5 text-zinc-600" />
-                    </button>
-                    <div><DialogTitle className="text-[#0A244A]">Novo Cadastro</DialogTitle></div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-[#0A244A]">Nome da {quickAdd.label}</Label>
-                    <Input autoFocus value={quickAddValue} onChange={(e) => setQuickAddValue(e.target.value)} />
-                  </div>
-                  <Button onClick={handleSaveQuickAdd} className="w-full bg-[#1E5AA8] hover:bg-[#103A73] text-white" disabled={loading || !quickAddValue}>
-                    {loading ? "A processar..." : "Salvar e Voltar"}
-                  </Button>
-                </div>
+                quickAdd.type === 'store' ? storeFormContent : genericQuickAddContent
               ) : (
                 <>
                   <DialogHeader>
@@ -465,7 +526,7 @@ export default function AcquisitionsPage() {
                       <div><Label>Cor</Label><SearchableSelect value={colorId} onChange={setColorId} options={taxonomy.colors} placeholder="Selecione" newItemLabel="Nova Cor" onAddNew={() => triggerQuickAdd('color', 'Cor', 'piece')} /></div>
                     </div>
                     <div className="space-y-3 bg-zinc-50 border border-zinc-200 rounded-lg p-4">
-                      <Label className="flex items-center gap-2"><Tag className="w-4 h-4" /> Etiquetas (Estado Atual)</Label>
+                      <Label className="flex items-center gap-2"><Tag className="w-4 h-4" /> Etiquetas</Label>
                       <div className="flex flex-wrap gap-2">
                         {AVAILABLE_TAGS.map(tag => (
                           <button type="button" key={tag} onClick={() => toggleTag(tag)} className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-all ${selectedTags.includes(tag) ? TAG_COLORS[tag] : "bg-white text-zinc-500 hover:bg-zinc-100"}`}>{tag}</button>
@@ -534,7 +595,7 @@ export default function AcquisitionsPage() {
                     <div className="mt-1 bg-zinc-50 border border-zinc-200 rounded-lg p-3 shadow-sm">
                       <div className="flex justify-between items-center mb-1.5">
                         <span className="text-[10px] uppercase font-bold text-zinc-500 flex items-center gap-1">
-                          <Package className="w-3 h-3"/> Triagem (Quant.)
+                          <Package className="w-3 h-3"/> Triagem
                         </span>
                         <span className="text-[10px] font-bold text-[#0A244A]">{lot.registeredPieces} de {lot.quantity}</span>
                       </div>
@@ -544,7 +605,7 @@ export default function AcquisitionsPage() {
 
                       <div className="flex justify-between items-center mb-1.5 mt-3">
                         <span className="text-[10px] uppercase font-bold text-zinc-500 flex items-center gap-1">
-                          <DollarSign className="w-3 h-3"/> Retorno do Invest.
+                          <DollarSign className="w-3 h-3"/> Retorno
                         </span>
                         <span className={`text-[10px] font-bold ${roiPercent >= 100 ? 'text-emerald-600' : 'text-amber-600'}`}>
                           {formatCurrency(lot.expectedRevenue)} / {formatCurrency(lot.totalCost)}
@@ -618,7 +679,7 @@ export default function AcquisitionsPage() {
                           
                           <div>
                             <div className="flex justify-between mb-1.5">
-                              <span className="text-[10px] font-bold text-zinc-500 flex items-center gap-1"><Package className="w-3.5 h-3.5"/> Qtd. Peças</span>
+                              <span className="text-[10px] font-bold text-zinc-500 flex items-center gap-1"><Package className="w-3.5 h-3.5"/> Triagem</span>
                               <span className="text-[10px] font-bold text-[#0A244A]">{lot.registeredPieces} / {lot.quantity}</span>
                             </div>
                             <div className="w-full h-1.5 bg-zinc-200 rounded-full overflow-hidden">
@@ -628,7 +689,7 @@ export default function AcquisitionsPage() {
 
                           <div>
                             <div className="flex justify-between mb-1.5">
-                              <span className="text-[10px] font-bold text-zinc-500 flex items-center gap-1"><DollarSign className="w-3.5 h-3.5"/> Retorno (ROI)</span>
+                              <span className="text-[10px] font-bold text-zinc-500 flex items-center gap-1"><DollarSign className="w-3.5 h-3.5"/> Retorno</span>
                               <span className={`text-[10px] font-bold ${roiPercent >= 100 ? 'text-emerald-600' : 'text-amber-600'}`}>
                                 {formatCurrency(lot.expectedRevenue)} / {formatCurrency(lot.totalCost)}
                               </span>
