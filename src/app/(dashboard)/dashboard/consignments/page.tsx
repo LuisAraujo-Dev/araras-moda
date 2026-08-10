@@ -2,17 +2,19 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Handshake, PlusCircle, CheckCircle2, AlertCircle, Pencil, Trash2, Calendar, Store as StoreIcon, PackageSearch, XCircle, Search, ChevronDown, Check, ArrowLeft } from "lucide-react";
+import { Handshake, PlusCircle, CheckCircle2, AlertCircle, Pencil, Trash2, Calendar, Store as StoreIcon, PackageSearch, XCircle, Search, ChevronDown, Check, ArrowLeft, ImageIcon } from "lucide-react";
 import { getConsignmentsAction, createConsignmentAction, updateConsignmentAction, deleteConsignmentAction } from "@/app/actions/consignment.actions";
-import { getPiecesAction, getTaxonomyAction, quickAddStore } from "@/app/actions/piece.actions";
+import { getPiecesAction, getTaxonomyAction } from "@/app/actions/piece.actions";
+import { createStoreAction } from "@/app/actions/store.actions";
 import { checkOnboardingStatusAction } from "@/app/actions/setup.actions";
-import { Consignment, Store, ConsignmentStatus, Piece } from "@prisma/client";
+import { Consignment, Store, ConsignmentStatus, Piece, PieceImage } from "@prisma/client";
 
 type ConsignmentItemData = {
   pieceId: string;
@@ -30,11 +32,14 @@ type ConsignmentWithRelations = Consignment & {
   shippingCost?: number | null;
 };
 
+type PieceWithImages = Piece & { images?: PieceImage[] };
+
 type PieceBasicData = {
   id: string;
   code: string;
   name: string;
   purchasePrice: number;
+  imageUrl: string | null;
 };
 
 type SelectedPieceState = {
@@ -42,10 +47,9 @@ type SelectedPieceState = {
   reason: string;
 };
 
-const STATUS_MAP: Record<ConsignmentStatus, { label: string; color: string }> = {
-  ACTIVE: { label: "Ativa (Em Loja)", color: "bg-emerald-100 text-emerald-800 border-emerald-200" },
-  FINISHED: { label: "Finalizada (Acerto Feito)", color: "bg-blue-100 text-blue-800 border-blue-200" },
-  RETURNED: { label: "Devolvida (Expirada)", color: "bg-zinc-200 text-zinc-800 border-zinc-300" },
+const STATUS_MAP: Partial<Record<ConsignmentStatus, { label: string; color: string }>> = {
+  ACTIVE: { label: "Ativa", color: "bg-emerald-100 text-emerald-800 border-emerald-200" },
+  FINISHED: { label: "Finalizada", color: "bg-blue-100 text-blue-800 border-blue-200" },
 };
 
 type SelectOption = { id: string; name?: string; sourceName?: string; code?: string; };
@@ -116,7 +120,6 @@ export default function ConsignmentsPage() {
   const [searchPiece, setSearchPiece] = useState("");
 
   const [quickAdd, setQuickAdd] = useState({ isOpen: false, type: "", label: "" });
-  const [quickAddValue, setQuickAddValue] = useState("");
 
   const loadData = async (cid: string) => {
     const [consignmentsData, tData, piecesData] = await Promise.all([
@@ -127,13 +130,14 @@ export default function ConsignmentsPage() {
     setConsignments(consignmentsData as ConsignmentWithRelations[]);
     setStores(tData.stores as Store[]);
     
-    const formattedPieces = (piecesData as Piece[])
+    const formattedPieces = (piecesData as PieceWithImages[])
         .filter(p => p.status !== 'VENDIDA')
         .map(p => ({
             id: p.id,
             code: p.code,
             name: p.name,
-            purchasePrice: p.purchasePrice
+            purchasePrice: p.purchasePrice,
+            imageUrl: p.images && p.images.length > 0 ? p.images[0].imageUrl : null
         }));
     setAvailablePieces(formattedPieces);
   };
@@ -226,20 +230,41 @@ export default function ConsignmentsPage() {
 
   const triggerQuickAdd = (type: string, label: string) => { 
     setQuickAdd({ isOpen: true, type, label }); 
-    setQuickAddValue(""); 
   };
 
-  const handleSaveQuickAddStore = async () => {
-    if (!quickAddValue || !companyId) return;
-    setLoading(true); 
-    const newStore = await quickAddStore(companyId, quickAddValue);
+  async function handleSaveStore(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!companyId) return;
+    setLoading(true);
     
-    await loadData(companyId); 
-    if (newStore) setStoreId(newStore.id);
+    const formData = new FormData(event.currentTarget);
+    const data = {
+      name: formData.get("name") as string,
+      type: formData.get("type") as string,
+      phone: formData.get("phone") as string,
+      address: formData.get("address") as string,
+      email: "",
+      commissionPercentage: 0,
+      notes: ""
+    };
     
-    setLoading(false); 
+    const result = await createStoreAction(companyId, data);
+    
+    if (result.success) {
+      await loadData(companyId);
+      const tData = await getTaxonomyAction(companyId);
+      const newStore = tData.stores.find((s: Store) => s.name === data.name);
+      
+      if (newStore) {
+        setStoreId(newStore.id);
+      }
+    } else {
+      showBanner(result.error || "Erro ao cadastrar parceiro.", "error");
+    }
+    
+    setLoading(false);
     setQuickAdd({ isOpen: false, type: "", label: "" });
-  };
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -310,6 +335,44 @@ export default function ConsignmentsPage() {
     p.name.toLowerCase().includes(searchPiece.toLowerCase())
   );
 
+  const storeFormContent = (
+    <form onSubmit={handleSaveStore} className="space-y-4 py-2">
+      <div className="flex items-center gap-2 mb-4">
+        <button type="button" onClick={() => setQuickAdd({ isOpen: false, type: "", label: "" })} className="p-2 hover:bg-zinc-100 rounded-full transition-colors cursor-pointer">
+          <ArrowLeft className="w-5 h-5 text-zinc-600" />
+        </button>
+        <div><DialogTitle className="text-[#0A244A]">Cadastrar Parceiro</DialogTitle></div>
+      </div>
+      <div className="space-y-3">
+        <div>
+          <Label className="text-[#0A244A]">Nome</Label>
+          <Input name="name" autoFocus required />
+        </div>
+        <div>
+          <Label className="text-[#0A244A]">Tipo</Label>
+          <select name="type" className="w-full h-10 border border-zinc-200 rounded-md px-3 bg-white text-sm outline-none focus:border-[#1E5AA8]" required>
+            <option value="Brechó">Brechó</option>
+            <option value="Bazar">Bazar</option>
+            <option value="Igreja">Igreja</option>
+            <option value="Atacado">Atacado</option>
+            <option value="Fornecedor">Outro</option>
+          </select>
+        </div>
+        <div>
+          <Label className="text-[#0A244A]">WhatsApp</Label>
+          <Input name="phone" />
+        </div>
+        <div>
+          <Label className="text-[#0A244A]">Endereço</Label>
+          <Input name="address" />
+        </div>
+      </div>
+      <Button type="submit" className="w-full bg-[#1E5AA8] hover:bg-[#103A73] text-white mt-4" disabled={loading}>
+        {loading ? "A processar..." : "Salvar"}
+      </Button>
+    </form>
+  );
+
   return (
     <div className="space-y-8 relative">
       {banner.show && (
@@ -331,23 +394,7 @@ export default function ConsignmentsPage() {
               <PlusCircle className="w-4 h-4" /> Nova Remessa
             </DialogTrigger>
             <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-              {quickAdd.isOpen ? (
-                <div className="space-y-6 py-2">
-                  <div className="flex items-center gap-2 mb-4">
-                    <button onClick={() => setQuickAdd({ isOpen: false, type: "", label: "" })} className="p-2 hover:bg-zinc-100 rounded-full transition-colors cursor-pointer">
-                      <ArrowLeft className="w-5 h-5 text-zinc-600" />
-                    </button>
-                    <div><DialogTitle className="text-[#0A244A]">Cadastrar Parceiro</DialogTitle></div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-[#0A244A]">Nome do {quickAdd.label}</Label>
-                    <Input autoFocus value={quickAddValue} onChange={(e) => setQuickAddValue(e.target.value)} />
-                  </div>
-                  <Button onClick={handleSaveQuickAddStore} className="w-full bg-[#1E5AA8] hover:bg-[#103A73] text-white" disabled={loading || !quickAddValue}>
-                    {loading ? "A processar..." : "Salvar e Voltar"}
-                  </Button>
-                </div>
-              ) : (
+              {quickAdd.isOpen ? storeFormContent : (
                 <>
                   <DialogHeader>
                     <DialogTitle className="text-[#0A244A]">{editingConsignment ? "Editar Remessa" : "Nova Remessa"}</DialogTitle>
@@ -364,7 +411,7 @@ export default function ConsignmentsPage() {
                         onChange={setStoreId} 
                         options={stores} 
                         placeholder="Selecione o Parceiro..." 
-                        newItemLabel="Cadastrar Novo Parceiro" 
+                        newItemLabel="Cadastrar Parceiro" 
                         onAddNew={() => triggerQuickAdd('store', 'Parceiro')} 
                       />
                     </div>
@@ -416,6 +463,13 @@ export default function ConsignmentsPage() {
                                     onChange={() => togglePieceSelection(piece.id)} 
                                     className="rounded border-zinc-300 w-4 h-4 text-[#1E5AA8] focus:ring-[#1E5AA8] cursor-pointer" 
                                   />
+                                  <div className="w-8 h-8 rounded shrink-0 bg-white border border-zinc-200 flex items-center justify-center overflow-hidden relative">
+                                    {piece.imageUrl ? (
+                                      <Image src={piece.imageUrl} alt={piece.name} fill className="object-cover" sizes="32px" />
+                                    ) : (
+                                      <ImageIcon className="w-4 h-4 text-zinc-300" />
+                                    )}
+                                  </div>
                                   <div className="flex flex-col">
                                     <span className="text-sm font-medium text-[#0A244A]">{piece.code} - {piece.name}</span>
                                     <span className="text-xs text-zinc-500">Custo: {formatCurrency(piece.purchasePrice)}</span>
@@ -428,7 +482,7 @@ export default function ConsignmentsPage() {
                                     value={pieceState.status === 'REJECTED' ? pieceState.reason : 'ACCEPTED'}
                                     onChange={(e) => updatePieceStatus(piece.id, e.target.value)}
                                   >
-                                    <option value="ACCEPTED">✅ Aceita (Ficou na loja)</option>
+                                    <option value="ACCEPTED">Aceita</option>
                                     <option value="Conserto">❌ Devolvida: Conserto</option>
                                     <option value="Higienização">❌ Devolvida: Higienização</option>
                                     <option value="Fora de Temporada">❌ Devolvida: Fora de Temp.</option>
@@ -446,19 +500,19 @@ export default function ConsignmentsPage() {
                       <div className="space-y-1">
                         <Label htmlFor="status" className="text-[#0A244A]">Status da Remessa</Label>
                         <select id="status" name="status" defaultValue={editingConsignment?.status || "ACTIVE"} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
-                          {Object.entries(STATUS_MAP).map(([key, { label }]) => (
-                            <option key={key} value={key}>{label}</option>
+                          {Object.entries(STATUS_MAP).map(([key, info]) => (
+                            <option key={key} value={key}>{info?.label}</option>
                           ))}
                         </select>
                       </div>
                       <div className="space-y-1">
-                        <Label htmlFor="shippingCost" className="text-[#0A244A]">Custo Envio / Uber (R$) - Opcional</Label>
-                        <Input id="shippingCost" name="shippingCost" type="number" step="0.01" min="0" placeholder="Lançado nas despesas" defaultValue={editingConsignment?.shippingCost || ""} />
+                        <Label htmlFor="shippingCost" className="text-[#0A244A]">Custo de Transporte</Label>
+                        <Input id="shippingCost" name="shippingCost" type="number" step="0.01" min="0" placeholder="Opcional" defaultValue={editingConsignment?.shippingCost || ""} />
                       </div>
                     </div>
 
                     <Button type="submit" className="w-full mt-4 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white h-11 text-base shadow-sm" disabled={loading}>
-                      {loading ? "A processar..." : (editingConsignment ? "Salvar Alterações" : "Criar Remessa com Avaliações")}
+                      {loading ? "A processar..." : "Criar Remessa"}
                     </Button>
                   </form>
                 </>
@@ -552,8 +606,8 @@ export default function ConsignmentsPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className={`font-medium px-2 py-0.5 text-xs ${STATUS_MAP[consignment.status].color}`}>
-                        {STATUS_MAP[consignment.status].label}
+                      <Badge variant="outline" className={`font-medium px-2 py-0.5 text-xs ${STATUS_MAP[consignment.status]?.color || 'bg-zinc-100'}`}>
+                        {STATUS_MAP[consignment.status]?.label || consignment.status}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
