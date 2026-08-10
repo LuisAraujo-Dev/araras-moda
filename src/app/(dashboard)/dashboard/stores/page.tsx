@@ -11,7 +11,7 @@ import { checkOnboardingStatusAction } from "@/app/actions/setup.actions";
 import { Store } from "@prisma/client";
 
 type StoreWithCount = Store & {
-  type?: string;
+  type?: string | null;
   _count: { pieces: number; consignments: number; };
 };
 
@@ -52,27 +52,32 @@ export default function StoresPage() {
     event.preventDefault();
     if (!companyId) return;
     setLoading(true);
+    
     const formData = new FormData(event.currentTarget);
+    
     const data = {
-      name: formData.get("name") as string,
-      phone: formData.get("phone") as string,
-      email: formData.get("email") as string,
-      address: formData.get("address") as string,
-      type: formData.get("type") as string,
+      name: formData.get("name")?.toString() || "",
+      phone: formData.get("phone")?.toString() || "",
+      email: "",
+      address: formData.get("address")?.toString() || "",
+      type: formData.get("type")?.toString() || "Fornecedor",
       commissionPercentage: 0,
-      notes: formData.get("notes") as string,
+      notes: "",
     };
+    
     const result = editingStore 
       ? await updateStoreAction(editingStore.id, companyId, data)
       : await createStoreAction(companyId, data);
+      
     setLoading(false);
+    
     if (result.success) {
       setOpen(false);
       setEditingStore(null);
-      showBanner("Parceiro processado!", "success");
+      showBanner("Parceiro processado com sucesso!", "success");
       await loadData(companyId);
     } else {
-      showBanner(result.error || "Erro.", "error");
+      showBanner(result.error || "Erro ao guardar parceiro.", "error");
     }
   }
 
@@ -82,7 +87,7 @@ export default function StoresPage() {
     const result = await deleteStoreAction(storeToDelete, companyId);
     setLoading(false);
     if (result.success) {
-      showBanner("Excluído!", "success");
+      showBanner("Excluído com sucesso!", "success");
       setStoreToDelete(null);
       await loadData(companyId);
     } else {
@@ -173,7 +178,7 @@ export default function StoresPage() {
               <div key={store.id} className="p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:bg-zinc-50 transition-colors">
                 <div>
                   <h3 className="font-semibold text-[#0A244A]">{store.name}</h3>
-                  <p className="text-[10px] text-zinc-500 uppercase font-bold mt-0.5 bg-zinc-100 px-1.5 py-0.5 rounded w-fit">{store.type}</p>
+                  <p className="text-[10px] text-zinc-500 uppercase font-bold mt-0.5 bg-zinc-100 px-1.5 py-0.5 rounded w-fit">{store.type || "Fornecedor"}</p>
                   <div className="text-xs mt-2 space-y-1 text-zinc-600">
                     <p className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5"/> {store.phone || "Sem telefone"}</p>
                     <p className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5"/> {store.address || "Sem endereço"}</p>

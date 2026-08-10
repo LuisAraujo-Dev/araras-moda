@@ -256,6 +256,7 @@ model Store {
   id                   String        @id @default(cuid())
   companyId            String
   name                 String
+  type                 String?       @default("Fornecedor")
   phone                String?
   email                String?
   address              String?
