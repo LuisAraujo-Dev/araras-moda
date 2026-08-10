@@ -1,16 +1,18 @@
+//src/app/(dashboard)/dashboard/consignments/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Handshake, PlusCircle, CheckCircle2, AlertCircle, Pencil, Trash2, Calendar, Store as StoreIcon, PackageSearch, XCircle } from "lucide-react";
-import { getConsignmentsAction, createConsignmentAction, updateConsignmentAction, deleteConsignmentAction, getStoresAction, getAvailablePiecesAction } from "@/app/actions/consignment.actions";
-import { Consignment, Store, ConsignmentStatus } from "@prisma/client";
+import { Handshake, PlusCircle, CheckCircle2, AlertCircle, Pencil, Trash2, Calendar, Store as StoreIcon, PackageSearch, XCircle, Search, ChevronDown, Check, ArrowLeft } from "lucide-react";
+import { getConsignmentsAction, createConsignmentAction, updateConsignmentAction, deleteConsignmentAction } from "@/app/actions/consignment.actions";
+import { getPiecesAction, getTaxonomyAction, quickAddStore } from "@/app/actions/piece.actions";
+import { checkOnboardingStatusAction } from "@/app/actions/setup.actions";
+import { Consignment, Store, ConsignmentStatus, Piece } from "@prisma/client";
 
 type ConsignmentItemData = {
   pieceId: string;
@@ -25,6 +27,7 @@ type ConsignmentItemData = {
 type ConsignmentWithRelations = Consignment & {
   store: Store;
   items: ConsignmentItemData[];
+  shippingCost?: number | null;
 };
 
 type PieceBasicData = {
@@ -45,10 +48,59 @@ const STATUS_MAP: Record<ConsignmentStatus, { label: string; color: string }> = 
   RETURNED: { label: "Devolvida (Expirada)", color: "bg-zinc-200 text-zinc-800 border-zinc-300" },
 };
 
-export default function ConsignmentsPage() {
-  const router = useRouter();
-  const mockCompanyId = "company-placeholder-id";
+type SelectOption = { id: string; name?: string; sourceName?: string; code?: string; };
 
+function SearchableSelect({ value, onChange, options, placeholder, newItemLabel, onAddNew }: { value: string; onChange: (val: string) => void; options: SelectOption[]; placeholder: string; newItemLabel: string; onAddNew: () => void; }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const getText = (opt: SelectOption) => opt.name || (opt.sourceName ? `${opt.sourceName} (${opt.code})` : "");
+  const selectedItem = options.find((o) => o.id === value);
+  const displayText = selectedItem ? getText(selectedItem) : placeholder;
+
+  const filtered = options.filter((o) => getText(o).toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => {
+      const tA = getText(a).toLowerCase(); const tB = getText(b).toLowerCase(); const s = search.toLowerCase();
+      if (tA.startsWith(s) && !tB.startsWith(s)) return -1; if (!tA.startsWith(s) && tB.startsWith(s)) return 1; return 0;
+    });
+
+  return (
+    <div className="relative">
+      <input type="text" value={value} required tabIndex={-1} className="absolute opacity-0 w-0 h-0 pointer-events-none -z-10" onChange={() => {}} />
+      <div className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm flex items-center justify-between cursor-pointer focus-within:border-[#1E5AA8] transition-colors" onClick={() => setIsOpen(!isOpen)}>
+        <span className={`truncate ${selectedItem ? "text-zinc-900" : "text-zinc-500"}`}>{displayText}</span>
+        <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0" />
+      </div>
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-60" onClick={() => setIsOpen(false)}></div>
+          <div className="absolute z-70 mt-1 w-full bg-white border border-zinc-200 rounded-md shadow-xl max-h-64 flex flex-col overflow-hidden">
+            <div className="bg-white p-2 border-b border-zinc-100 shrink-0">
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-2 top-2 text-zinc-400" />
+                <input autoFocus type="text" className="w-full h-8 pl-8 pr-3 text-sm bg-zinc-50 border rounded focus:border-[#1E5AA8] outline-none" placeholder="Buscar..." value={search} onChange={e => setSearch(e.target.value)} />
+              </div>
+            </div>
+            <div className="p-1 overflow-y-auto custom-scrollbar">
+              {filtered.length === 0 ? <div className="px-3 py-4 text-sm text-zinc-500 text-center">Sem resultados</div> : filtered.map((opt) => (
+                   <div key={opt.id} className="px-3 py-2 text-sm hover:bg-zinc-100 rounded cursor-pointer flex justify-between" onClick={() => { onChange(opt.id); setIsOpen(false); setSearch(""); }}>
+                     <span className="truncate pr-2">{getText(opt)}</span>{value === opt.id && <Check className="w-4 h-4 text-[#1E5AA8] shrink-0" />}
+                   </div>
+                ))}
+              <div className="border-t border-zinc-100 my-1"></div>
+              <div className="px-3 py-2.5 text-sm font-bold text-[#1E5AA8] hover:bg-blue-50 rounded cursor-pointer flex items-center gap-2" onClick={() => { onAddNew(); setIsOpen(false); setSearch(""); }}>
+                <PlusCircle className="w-4 h-4 shrink-0" /> <span className="truncate">{newItemLabel}</span>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+export default function ConsignmentsPage() {
+  const [companyId, setCompanyId] = useState<string>("");
   const [consignments, setConsignments] = useState<ConsignmentWithRelations[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
   const [availablePieces, setAvailablePieces] = useState<PieceBasicData[]>([]);
@@ -63,29 +115,36 @@ export default function ConsignmentsPage() {
   const [selectedPieces, setSelectedPieces] = useState<Record<string, SelectedPieceState>>({});
   const [searchPiece, setSearchPiece] = useState("");
 
-  const loadData = async () => {
-    const [consignmentsData, storesData, piecesData] = await Promise.all([
-      getConsignmentsAction(mockCompanyId),
-      getStoresAction(mockCompanyId),
-      getAvailablePiecesAction(mockCompanyId)
+  const [quickAdd, setQuickAdd] = useState({ isOpen: false, type: "", label: "" });
+  const [quickAddValue, setQuickAddValue] = useState("");
+
+  const loadData = async (cid: string) => {
+    const [consignmentsData, tData, piecesData] = await Promise.all([
+      getConsignmentsAction(cid),
+      getTaxonomyAction(cid),
+      getPiecesAction(cid)
     ]);
     setConsignments(consignmentsData as ConsignmentWithRelations[]);
-    setStores(storesData as Store[]);
-    setAvailablePieces(piecesData as PieceBasicData[]);
+    setStores(tData.stores as Store[]);
+    
+    const formattedPieces = (piecesData as Piece[])
+        .filter(p => p.status !== 'VENDIDA')
+        .map(p => ({
+            id: p.id,
+            code: p.code,
+            name: p.name,
+            purchasePrice: p.purchasePrice
+        }));
+    setAvailablePieces(formattedPieces);
   };
 
   useEffect(() => {
     let isMounted = true;
     const fetchInitialData = async () => {
-      const [consignmentsData, storesData, piecesData] = await Promise.all([
-        getConsignmentsAction(mockCompanyId),
-        getStoresAction(mockCompanyId),
-        getAvailablePiecesAction(mockCompanyId)
-      ]);
-      if (isMounted) {
-        setConsignments(consignmentsData as ConsignmentWithRelations[]);
-        setStores(storesData as Store[]);
-        setAvailablePieces(piecesData as PieceBasicData[]);
+      const status = await checkOnboardingStatusAction();
+      if (status.success && status.companyId) {
+        if (isMounted) setCompanyId(status.companyId);
+        await loadData(status.companyId);
       }
     };
     fetchInitialData();
@@ -119,6 +178,7 @@ export default function ConsignmentsPage() {
       setStoreId("");
       setSelectedPieces({});
       setSearchPiece("");
+      setQuickAdd({ isOpen: false, type: "", label: "" });
     }
   };
 
@@ -164,9 +224,26 @@ export default function ConsignmentsPage() {
     }
   };
 
+  const triggerQuickAdd = (type: string, label: string) => { 
+    setQuickAdd({ isOpen: true, type, label }); 
+    setQuickAddValue(""); 
+  };
+
+  const handleSaveQuickAddStore = async () => {
+    if (!quickAddValue || !companyId) return;
+    setLoading(true); 
+    const newStore = await quickAddStore(companyId, quickAddValue);
+    
+    await loadData(companyId); 
+    if (newStore) setStoreId(newStore.id);
+    
+    setLoading(false); 
+    setQuickAdd({ isOpen: false, type: "", label: "" });
+  };
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!storeId) {
+    if (!storeId || !companyId) {
       showBanner("Selecione um parceiro.", "error");
       return;
     }
@@ -191,32 +268,32 @@ export default function ConsignmentsPage() {
 
     let result;
     if (editingConsignment) {
-      result = await updateConsignmentAction(editingConsignment.id, mockCompanyId, data);
+      result = await updateConsignmentAction(editingConsignment.id, companyId, data);
     } else {
-      result = await createConsignmentAction(mockCompanyId, data);
+      result = await createConsignmentAction(companyId, data);
     }
     
     setLoading(false);
 
     if (result.success) {
       handleCloseModal(false);
-      showBanner(editingConsignment ? "Remessa atualizada com sucesso!" : "Nova remessa criada com sucesso!", "success");
-      await loadData();
+      showBanner(editingConsignment ? "Remessa atualizada!" : "Remessa criada!", "success");
+      await loadData(companyId);
     } else {
       showBanner(result.error || "Erro ao guardar a remessa.", "error");
     }
   }
 
   async function confirmDelete() {
-    if (!consignmentToDelete) return;
+    if (!consignmentToDelete || !companyId) return;
     setLoading(true);
-    const result = await deleteConsignmentAction(consignmentToDelete, mockCompanyId);
+    const result = await deleteConsignmentAction(consignmentToDelete, companyId);
     setLoading(false);
     
     if (result.success) {
       showBanner("Remessa excluída com sucesso!", "success");
       setConsignmentToDelete(null);
-      await loadData();
+      await loadData(companyId);
     } else {
       showBanner(result.error || "Erro ao excluir a remessa.", "error");
     }
@@ -245,7 +322,7 @@ export default function ConsignmentsPage() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-2">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-[#0A244A]">Consignações</h1>
-          <p className="text-[#4B4B4B] mt-1">Gira remessas e avaliações. As peças devolvidas atualizam o estoque automaticamente.</p>
+          <p className="text-[#4B4B4B] mt-1 text-sm md:text-base">Gira remessas e avaliações. As peças devolvidas atualizam o estoque automaticamente.</p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -254,129 +331,138 @@ export default function ConsignmentsPage() {
               <PlusCircle className="w-4 h-4" /> Nova Remessa
             </DialogTrigger>
             <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle className="text-[#0A244A]">{editingConsignment ? "Editar Remessa" : "Criar Nova Remessa"}</DialogTitle>
-                <DialogDescription className="text-[#4B4B4B]">
-                  Selecione as peças levadas e indique caso alguma tenha sido devolvida na avaliação.
-                </DialogDescription>
-              </DialogHeader>
-
-              <form key={editingConsignment?.id || "new"} onSubmit={handleSubmit} className="space-y-6 pt-4">
-                <div className="space-y-1">
-                  <Label htmlFor="storeId" className="text-[#0A244A]">Loja Parceira</Label>
-                  <select 
-                    id="storeId" 
-                    value={storeId} 
-                    onChange={(e) => { 
-                      if (e.target.value === "NEW") { 
-                        router.push('/dashboard/stores'); 
-                      } else { 
-                        setStoreId(e.target.value); 
-                      } 
-                    }} 
-                    className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" 
-                    required
-                  >
-                    <option value="">Selecione o destino...</option>
-                    {stores.map(store => (
-                      <option key={store.id} value={store.id}>{store.name}</option>
-                    ))}
-                    <option value="NEW" className="font-bold text-[#1E5AA8]">+ Cadastrar Novo Parceiro (Ir para tela)</option>
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label htmlFor="startDate" className="text-[#0A244A]">Data do Envio / Avaliação</Label>
-                    <Input id="startDate" name="startDate" type="date" defaultValue={editingConsignment ? new Date(editingConsignment.startDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]} required />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="expectedReturnDate" className="text-[#0A244A]">Previsão de Retorno (Opcional)</Label>
-                    <Input id="expectedReturnDate" name="expectedReturnDate" type="date" defaultValue={editingConsignment?.expectedReturnDate ? new Date(editingConsignment.expectedReturnDate).toISOString().split('T')[0] : ""} />
-                  </div>
-                </div>
-
-                <div className="space-y-3 bg-zinc-50 border border-zinc-200 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <Label className="text-[#0A244A] flex items-center gap-2">
-                      <PackageSearch className="w-4 h-4" /> Avaliação das Peças ({Object.keys(selectedPieces).length} selecionadas)
-                    </Label>
-                    <button type="button" onClick={selectAllFiltered} className="text-xs font-medium text-[#1E5AA8] hover:underline cursor-pointer">
-                      Selecionar Todos (Filtrados)
+              {quickAdd.isOpen ? (
+                <div className="space-y-6 py-2">
+                  <div className="flex items-center gap-2 mb-4">
+                    <button onClick={() => setQuickAdd({ isOpen: false, type: "", label: "" })} className="p-2 hover:bg-zinc-100 rounded-full transition-colors cursor-pointer">
+                      <ArrowLeft className="w-5 h-5 text-zinc-600" />
                     </button>
+                    <div><DialogTitle className="text-[#0A244A]">Cadastrar Parceiro</DialogTitle></div>
                   </div>
-                  
-                  <Input 
-                    placeholder="Procurar peça por código ou nome..." 
-                    value={searchPiece}
-                    onChange={(e) => setSearchPiece(e.target.value)}
-                    className="bg-white mb-2"
-                  />
-                  
-                  <div className="h-64 overflow-y-auto border border-zinc-200 rounded-md bg-white p-2 space-y-1">
-                    {filteredPieces.length === 0 ? (
-                      <div className="h-full flex items-center justify-center text-xs text-zinc-500">
-                        Nenhuma peça encontrada.
+                  <div className="space-y-2">
+                    <Label className="text-[#0A244A]">Nome do {quickAdd.label}</Label>
+                    <Input autoFocus value={quickAddValue} onChange={(e) => setQuickAddValue(e.target.value)} />
+                  </div>
+                  <Button onClick={handleSaveQuickAddStore} className="w-full bg-[#1E5AA8] hover:bg-[#103A73] text-white" disabled={loading || !quickAddValue}>
+                    {loading ? "A processar..." : "Salvar e Voltar"}
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <DialogHeader>
+                    <DialogTitle className="text-[#0A244A]">{editingConsignment ? "Editar Remessa" : "Nova Remessa"}</DialogTitle>
+                    <DialogDescription className="text-[#4B4B4B]">
+                      Selecione o parceiro, as peças levadas e indique caso alguma tenha sido devolvida na avaliação.
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  <form key={editingConsignment?.id || "new"} onSubmit={handleSubmit} className="space-y-6 pt-4">
+                    <div className="space-y-1">
+                      <Label className="text-[#0A244A]">Parceiro</Label>
+                      <SearchableSelect 
+                        value={storeId} 
+                        onChange={setStoreId} 
+                        options={stores} 
+                        placeholder="Selecione o Parceiro..." 
+                        newItemLabel="Cadastrar Novo Parceiro" 
+                        onAddNew={() => triggerQuickAdd('store', 'Parceiro')} 
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <Label htmlFor="startDate" className="text-[#0A244A]">Data da Consignação</Label>
+                        <Input id="startDate" name="startDate" type="date" defaultValue={editingConsignment ? new Date(editingConsignment.startDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]} required />
                       </div>
-                    ) : (
-                      filteredPieces.map(piece => {
-                        const isSelected = !!selectedPieces[piece.id];
-                        const pieceState = selectedPieces[piece.id];
+                      <div className="space-y-1">
+                        <Label htmlFor="expectedReturnDate" className="text-[#0A244A]">Previsão de Retorno</Label>
+                        <Input id="expectedReturnDate" name="expectedReturnDate" type="date" defaultValue={editingConsignment?.expectedReturnDate ? new Date(editingConsignment.expectedReturnDate).toISOString().split('T')[0] : ""} />
+                      </div>
+                    </div>
 
-                        return (
-                          <div key={piece.id} className={`flex items-center gap-3 p-2 rounded-md transition-colors ${isSelected ? (pieceState.status === 'ACCEPTED' ? 'bg-blue-50 border border-blue-100' : 'bg-rose-50 border border-rose-100') : 'hover:bg-zinc-50 border border-transparent'}`}>
-                            <label className="flex items-center gap-3 cursor-pointer flex-1">
-                              <input 
-                                type="checkbox" 
-                                checked={isSelected} 
-                                onChange={() => togglePieceSelection(piece.id)} 
-                                className="rounded border-zinc-300 w-4 h-4 text-[#1E5AA8] focus:ring-[#1E5AA8] cursor-pointer" 
-                              />
-                              <div className="flex flex-col">
-                                <span className="text-sm font-medium text-[#0A244A]">{piece.code} - {piece.name}</span>
-                                <span className="text-xs text-zinc-500">Custo: {formatCurrency(piece.purchasePrice)}</span>
-                              </div>
-                            </label>
-                            
-                            {isSelected && (
-                              <select 
-                                className={`text-xs border rounded p-1.5 focus:outline-none w-48 ${pieceState.status === 'REJECTED' ? 'border-rose-300 text-rose-800 bg-white' : 'border-zinc-200 text-zinc-700 bg-white'}`}
-                                value={pieceState.status === 'REJECTED' ? pieceState.reason : 'ACCEPTED'}
-                                onChange={(e) => updatePieceStatus(piece.id, e.target.value)}
-                              >
-                                <option value="ACCEPTED">✅ Aceita (Ficou na loja)</option>
-                                <option value="Conserto">❌ Devolvida: Conserto</option>
-                                <option value="Higienização">❌ Devolvida: Higienização</option>
-                                <option value="Fora de Temporada">❌ Devolvida: Fora de Temp.</option>
-                                <option value="Sem Interesse">❌ Devolvida: Sem Interesse</option>
-                              </select>
-                            )}
+                    <div className="space-y-3 bg-zinc-50 border border-zinc-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <Label className="text-[#0A244A] flex items-center gap-2">
+                          <PackageSearch className="w-4 h-4" /> Avaliação das Peças ({Object.keys(selectedPieces).length} selecionadas)
+                        </Label>
+                        <button type="button" onClick={selectAllFiltered} className="text-xs font-medium text-[#1E5AA8] hover:underline cursor-pointer">
+                          Selecionar Todos (Filtrados)
+                        </button>
+                      </div>
+                      
+                      <Input 
+                        placeholder="Procurar peça por código ou nome..." 
+                        value={searchPiece}
+                        onChange={(e) => setSearchPiece(e.target.value)}
+                        className="bg-white mb-2"
+                      />
+                      
+                      <div className="h-64 overflow-y-auto border border-zinc-200 rounded-md bg-white p-2 space-y-1">
+                        {filteredPieces.length === 0 ? (
+                          <div className="h-full flex items-center justify-center text-xs text-zinc-500">
+                            Nenhuma peça disponível ou não encontrada.
                           </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
+                        ) : (
+                          filteredPieces.map(piece => {
+                            const isSelected = !!selectedPieces[piece.id];
+                            const pieceState = selectedPieces[piece.id];
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label htmlFor="status" className="text-[#0A244A]">Status da Remessa</Label>
-                    <select id="status" name="status" defaultValue={editingConsignment?.status || "ACTIVE"} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
-                      {Object.entries(STATUS_MAP).map(([key, { label }]) => (
-                        <option key={key} value={key}>{label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="shippingCost" className="text-[#0A244A]">Custo Envio / Uber (R$) - Opcional</Label>
-                    <Input id="shippingCost" name="shippingCost" type="number" step="0.01" min="0" placeholder="Lançado nas despesas" />
-                  </div>
-                </div>
+                            return (
+                              <div key={piece.id} className={`flex items-center gap-3 p-2 rounded-md transition-colors ${isSelected ? (pieceState.status === 'ACCEPTED' ? 'bg-blue-50 border border-blue-100' : 'bg-rose-50 border border-rose-100') : 'hover:bg-zinc-50 border border-transparent'}`}>
+                                <label className="flex items-center gap-3 cursor-pointer flex-1">
+                                  <input 
+                                    type="checkbox" 
+                                    checked={isSelected} 
+                                    onChange={() => togglePieceSelection(piece.id)} 
+                                    className="rounded border-zinc-300 w-4 h-4 text-[#1E5AA8] focus:ring-[#1E5AA8] cursor-pointer" 
+                                  />
+                                  <div className="flex flex-col">
+                                    <span className="text-sm font-medium text-[#0A244A]">{piece.code} - {piece.name}</span>
+                                    <span className="text-xs text-zinc-500">Custo: {formatCurrency(piece.purchasePrice)}</span>
+                                  </div>
+                                </label>
+                                
+                                {isSelected && (
+                                  <select 
+                                    className={`text-xs border rounded p-1.5 focus:outline-none w-48 ${pieceState.status === 'REJECTED' ? 'border-rose-300 text-rose-800 bg-white' : 'border-zinc-200 text-zinc-700 bg-white'}`}
+                                    value={pieceState.status === 'REJECTED' ? pieceState.reason : 'ACCEPTED'}
+                                    onChange={(e) => updatePieceStatus(piece.id, e.target.value)}
+                                  >
+                                    <option value="ACCEPTED">✅ Aceita (Ficou na loja)</option>
+                                    <option value="Conserto">❌ Devolvida: Conserto</option>
+                                    <option value="Higienização">❌ Devolvida: Higienização</option>
+                                    <option value="Fora de Temporada">❌ Devolvida: Fora de Temp.</option>
+                                    <option value="Sem Interesse">❌ Devolvida: Sem Interesse</option>
+                                  </select>
+                                )}
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
 
-                <Button type="submit" className="w-full mt-4 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white h-11 text-base shadow-sm" disabled={loading}>
-                  {loading ? "A processar..." : (editingConsignment ? "Salvar Alterações" : "Criar Remessa com Avaliações")}
-                </Button>
-              </form>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <Label htmlFor="status" className="text-[#0A244A]">Status da Remessa</Label>
+                        <select id="status" name="status" defaultValue={editingConsignment?.status || "ACTIVE"} className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-sm" required>
+                          {Object.entries(STATUS_MAP).map(([key, { label }]) => (
+                            <option key={key} value={key}>{label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="shippingCost" className="text-[#0A244A]">Custo Envio / Uber (R$) - Opcional</Label>
+                        <Input id="shippingCost" name="shippingCost" type="number" step="0.01" min="0" placeholder="Lançado nas despesas" defaultValue={editingConsignment?.shippingCost || ""} />
+                      </div>
+                    </div>
+
+                    <Button type="submit" className="w-full mt-4 cursor-pointer bg-[#1E5AA8] hover:bg-[#103A73] text-white h-11 text-base shadow-sm" disabled={loading}>
+                      {loading ? "A processar..." : (editingConsignment ? "Salvar Alterações" : "Criar Remessa com Avaliações")}
+                    </Button>
+                  </form>
+                </>
+              )}
             </DialogContent>
           </Dialog>
 
