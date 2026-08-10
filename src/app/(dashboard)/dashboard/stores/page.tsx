@@ -123,12 +123,15 @@ export default function StoresPage() {
               <Input name="name" placeholder="Nome" defaultValue={editingStore?.name} required />
               <select name="type" className="w-full h-10 border rounded px-2" defaultValue={editingStore?.type || "Fornecedor"}>
                 <option value="Fornecedor">Fornecedor</option>
-                <option value="Caridade">Caridade</option>
+                <option value="Brechó">Brechó</option>
+                <option value="Bazar">Bazar</option>
+                <option value="Igreja">Igreja</option>
+                <option value="Atacado">Atacado</option>
                 <option value="Vendedor">Vendedor</option>
               </select>
               <Input name="phone" placeholder="WhatsApp" defaultValue={editingStore?.phone || ""} />
               <Input name="address" placeholder="Endereço" defaultValue={editingStore?.address || ""} />
-              <Button className="w-full bg-[#1E5AA8]" disabled={loading}>{loading ? "A processar..." : "Guardar"}</Button>
+              <Button className="w-full bg-[#1E5AA8]" disabled={loading}>{loading ? "A processar..." : "Cadastrar"}</Button>
             </form>
           </DialogContent>
         </Dialog>

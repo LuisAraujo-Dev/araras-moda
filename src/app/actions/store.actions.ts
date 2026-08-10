@@ -33,6 +33,7 @@ type StoreInput = {
   phone: string;
   email: string;
   address: string;
+  type?: string;
   commissionPercentage: number;
   notes: string;
 };
