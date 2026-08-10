@@ -1,3 +1,4 @@
+//src/app/actions/consignment.actions.ts
 "use server";
 
 import { prisma } from "@/lib/prisma";
@@ -20,39 +21,12 @@ export async function getConsignmentsAction(companyId: string) {
         items: {
           include: {
             piece: {
-              select: { code: true, name: true }
+              select: { code: true, name: true, purchasePrice: true }
             }
           }
         },
       },
       orderBy: { startDate: "desc" },
-    });
-  } catch (error) {
-    console.error(error);
-    return [];
-  }
-}
-
-export async function getStoresAction(companyId: string) {
-  try {
-    const realId = await getRealCompanyId(companyId);
-    return await prisma.store.findMany({
-      where: { companyId: realId },
-      orderBy: { name: "asc" },
-    });
-  } catch (error) {
-    console.error(error);
-    return [];
-  }
-}
-
-export async function getAvailablePiecesAction(companyId: string) {
-  try {
-    const realId = await getRealCompanyId(companyId);
-    return await prisma.piece.findMany({
-      where: { companyId: realId },
-      select: { id: true, code: true, name: true, purchasePrice: true, estimatedSalePrice: true, tags: true, observations: true },
-      orderBy: { createdAt: "desc" },
     });
   } catch (error) {
     console.error(error);
@@ -75,7 +49,7 @@ type CreateConsignmentInput = {
   shippingCost?: number;
 };
 
-async function processPieceUpdates(realId: string, storeId: string, piecesInput: PieceSelection[]) {
+async function processPieceUpdates(realId: string, storeId: string, piecesInput: PieceSelection[], consignmentStatus: ConsignmentStatus) {
   const store = await prisma.store.findUnique({ where: { id: storeId } });
   const storeName = store?.name || "Parceiro";
 
@@ -85,32 +59,51 @@ async function processPieceUpdates(realId: string, storeId: string, piecesInput:
 
   for (const input of piecesInput) {
     const record = pieceMap.get(input.id);
-    if (!record) continue;
+    
+    if (!record || record.status === 'VENDIDA') continue;
 
-    if (input.status === 'ACCEPTED') {
-      await prisma.piece.update({
-        where: { id: input.id },
-        data: { storeId: storeId, status: "CONSIGNADA" }
-      });
+    let newStatus = record.status;
+    let newStoreId = record.storeId;
+    let newObs = record.observations;
+    const tagsSet = new Set(record.tags || []);
+
+    if (consignmentStatus === 'FINISHED') {
+      newStatus = "ESTOQUE";
+      newStoreId = null;
+      tagsSet.delete("Em consignação");
+      tagsSet.add("Em estoque");
     } else {
-      const newObs = record.observations 
-        ? `${record.observations} | [Avaliação] Reprovada em ${storeName}: ${input.reason}`
-        : `[Avaliação] Reprovada em ${storeName}: ${input.reason}`;
-      
-      const tagsSet = new Set(record.tags || []);
-      if (input.reason === "Conserto") tagsSet.add("Conserto");
-      if (input.reason === "Higienização") tagsSet.add("Higienização");
-
-      await prisma.piece.update({
-        where: { id: input.id },
-        data: { 
-          storeId: null, 
-          status: "ESTOQUE",
-          observations: newObs,
-          tags: Array.from(tagsSet)
+      if (input.status === 'ACCEPTED') {
+        newStatus = "CONSIGNADA";
+        newStoreId = storeId;
+        tagsSet.delete("Em estoque");
+        tagsSet.add("Em consignação");
+      } else {
+        newStatus = "ESTOQUE";
+        newStoreId = null;
+        tagsSet.delete("Em consignação");
+        tagsSet.add("Em estoque");
+        
+        if (input.reason) {
+          if (input.reason === "Conserto" || input.reason === "Higienização") {
+            tagsSet.add(input.reason);
+          }
+          newObs = record.observations 
+            ? `${record.observations} | [Avaliação] Reprovada em ${storeName}: ${input.reason}`
+            : `[Avaliação] Reprovada em ${storeName}: ${input.reason}`;
         }
-      });
+      }
     }
+
+    await prisma.piece.update({
+      where: { id: input.id },
+      data: { 
+        storeId: newStoreId, 
+        status: newStatus,
+        observations: newObs,
+        tags: Array.from(tagsSet)
+      }
+    });
   }
 }
 
@@ -121,7 +114,7 @@ export async function createConsignmentAction(companyId: string, data: CreateCon
     const piecesData = await prisma.piece.findMany({ where: { id: { in: data.pieces.map(p => p.id) } } });
     const pieceMap = new Map(piecesData.map(p => [p.id, p]));
 
-    await prisma.consignment.create({
+    const consignment = await prisma.consignment.create({
       data: {
         storeId: data.storeId,
         startDate: data.startDate,
@@ -142,15 +135,15 @@ export async function createConsignmentAction(companyId: string, data: CreateCon
       },
     });
 
-    await processPieceUpdates(realId, data.storeId, data.pieces);
+    await processPieceUpdates(realId, data.storeId, data.pieces, data.status);
 
     if (data.shippingCost && data.shippingCost > 0) {
       const store = await prisma.store.findUnique({ where: { id: data.storeId } });
       await prisma.expense.create({
         data: { 
           amount: data.shippingCost, 
-          category: "Uber/99", 
-          description: `Envio Consignação: ${store?.name || "Parceiro"}`, 
+          category: "Logística", 
+          description: `Transporte Remessa #${consignment.id.substring(0,8)}: ${store?.name || "Parceiro"}`, 
           date: data.startDate, 
           companyId: realId 
         }
@@ -158,10 +151,11 @@ export async function createConsignmentAction(companyId: string, data: CreateCon
     }
 
     revalidatePath("/dashboard/consignments");
+    revalidatePath("/dashboard/inventory");
     return { success: true };
   } catch (error) {
     console.error(error);
-    return { error: "Falha ao criar a remessa de consignação." };
+    return { success: false, error: "Falha ao criar a remessa." };
   }
 }
 
@@ -197,15 +191,15 @@ export async function updateConsignmentAction(consignmentId: string, companyId: 
       },
     });
 
-    await processPieceUpdates(realId, data.storeId, data.pieces);
+    await processPieceUpdates(realId, data.storeId, data.pieces, data.status);
 
     if (data.shippingCost && data.shippingCost > 0) {
       const store = await prisma.store.findUnique({ where: { id: data.storeId } });
       await prisma.expense.create({
         data: { 
           amount: data.shippingCost, 
-          category: "Uber/99", 
-          description: `Envio Consignação: ${store?.name || "Parceiro"} (Atualizado)`, 
+          category: "Logística", 
+          description: `Transporte Remessa #${consignmentId.substring(0,8)}: ${store?.name || "Parceiro"} (Atualizado)`, 
           date: data.startDate, 
           companyId: realId 
         }
@@ -213,23 +207,45 @@ export async function updateConsignmentAction(consignmentId: string, companyId: 
     }
 
     revalidatePath("/dashboard/consignments");
+    revalidatePath("/dashboard/inventory");
     return { success: true };
   } catch (error) {
     console.error(error);
-    return { error: "Falha ao atualizar a remessa." };
+    return { success: false, error: "Falha ao atualizar a remessa." };
   }
 }
 
 export async function deleteConsignmentAction(consignmentId: string, companyId: string) {
   try {
     const realId = await getRealCompanyId(companyId);
+    
+    const items = await prisma.consignmentItem.findMany({
+      where: { consignmentId },
+      include: { piece: true }
+    });
+
+    for (const item of items) {
+      if (item.piece.status !== 'VENDIDA') {
+        const tagsSet = new Set(item.piece.tags || []);
+        tagsSet.delete("Em consignação");
+        tagsSet.add("Em estoque");
+
+        await prisma.piece.update({
+          where: { id: item.pieceId },
+          data: { status: 'ESTOQUE', storeId: null, tags: Array.from(tagsSet) }
+        });
+      }
+    }
+
     await prisma.consignment.delete({
       where: { id: consignmentId, companyId: realId },
     });
+    
     revalidatePath("/dashboard/consignments");
+    revalidatePath("/dashboard/inventory");
     return { success: true };
   } catch (error) {
     console.error(error);
-    return { error: "Falha ao excluir a remessa. Verifique se existem peças pendentes de acerto." };
+    return { success: false, error: "Falha ao excluir a remessa." };
   }
 }
