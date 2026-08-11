@@ -62,7 +62,7 @@ export async function updateStorefrontConfigAction(data: {
       });
     }
 
-    revalidatePath("/dashboard/storefront");
+    revalidatePath("/", "layout");
     return { success: true, data: config };
   } catch (error: unknown) {
     console.error(error);
@@ -84,8 +84,7 @@ export async function togglePieceVisibilityAction(pieceId: string, isPublished: 
       data: { isPublished },
     });
     
-    revalidatePath("/dashboard/inventory");
-    revalidatePath("/dashboard/storefront");
+    revalidatePath("/", "layout");
     return { success: true };
   } catch (error) {
     console.error(error);
@@ -125,8 +124,7 @@ export async function updateStorefrontPieceAction(pieceId: string, data: {
       }
     }
 
-    revalidatePath("/dashboard/storefront");
-    revalidatePath("/dashboard/inventory");
+    revalidatePath("/", "layout");
     return { success: true };
   } catch (error) {
     console.error(error);

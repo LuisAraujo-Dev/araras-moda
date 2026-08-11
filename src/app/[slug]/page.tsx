@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import StorefrontClient from "./StorefrontClient";
 
+export const dynamic = 'force-dynamic';
+
 export default async function PublicStorefrontPage(props: {
   params: Promise<{ slug: string }> | { slug: string };
   searchParams: Promise<{ cat?: string }> | { cat?: string };
@@ -35,7 +37,6 @@ export default async function PublicStorefrontPage(props: {
     orderBy: { createdAt: 'desc' }
   });
 
-  // Limpar os dados para passar de forma segura para o lado do cliente (Client Component)
   const cleanPieces = piecesData.map(p => ({
     id: p.id,
     code: p.code,
