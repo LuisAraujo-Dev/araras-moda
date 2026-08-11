@@ -25,6 +25,7 @@ type PieceBasic = {
   name: string;
   purchasePrice: number;
   estimatedSalePrice: number;
+  promoPrice: number | null;
   observations: string | null;
   isPublished: boolean;
   isFeatured: boolean;
@@ -77,6 +78,7 @@ export default function StorefrontManagementPage() {
       name: p.name,
       purchasePrice: p.purchasePrice,
       estimatedSalePrice: p.estimatedSalePrice || 0,
+      promoPrice: p.promoPrice || null,
       observations: p.observations || "",
       isPublished: p.isPublished,
       isFeatured: p.isFeatured || false,
@@ -195,8 +197,11 @@ export default function StorefrontManagementPage() {
       }
     }
 
+    const promoPriceRaw = formData.get("promoPrice");
+    
     const data = {
       estimatedSalePrice: Number(formData.get("estimatedSalePrice")),
+      promoPrice: promoPriceRaw ? Number(promoPriceRaw) : null,
       observations: formData.get("observations") as string,
       isFeatured: formData.get("isFeatured") === "on",
       imageUrl: finalImageUrl && !finalImageUrl.startsWith('blob:') ? finalImageUrl : undefined
@@ -208,6 +213,7 @@ export default function StorefrontManagementPage() {
       setPieces(prev => prev.map(p => p.id === editingPiece.id ? { 
         ...p, 
         estimatedSalePrice: data.estimatedSalePrice, 
+        promoPrice: data.promoPrice,
         observations: data.observations, 
         isFeatured: data.isFeatured,
         imageUrl: finalImageUrl 
@@ -359,7 +365,15 @@ export default function StorefrontManagementPage() {
                     <div className="flex-1 min-w-0 pt-0.5">
                       <p className="text-sm font-bold text-[#0A244A] truncate">{piece.name}</p>
                       <p className="text-[11px] text-zinc-500 font-medium truncate mt-0.5">Ref: {piece.code}</p>
-                      <p className="text-xs font-bold text-emerald-700 mt-1">{piece.estimatedSalePrice > 0 ? formatCurrency(piece.estimatedSalePrice) : 'Preço não definido'}</p>
+                      
+                      {piece.promoPrice && piece.promoPrice > 0 ? (
+                        <p className="text-xs font-bold text-rose-600 mt-1">
+                          <span className="line-through text-zinc-400 font-normal mr-1">{formatCurrency(piece.estimatedSalePrice)}</span>
+                          {formatCurrency(piece.promoPrice)}
+                        </p>
+                      ) : (
+                        <p className="text-xs font-bold text-emerald-700 mt-1">{piece.estimatedSalePrice > 0 ? formatCurrency(piece.estimatedSalePrice) : 'Preço não definido'}</p>
+                      )}
                     </div>
 
                     <div className="flex flex-col gap-1.5 shrink-0">
@@ -408,15 +422,20 @@ export default function StorefrontManagementPage() {
                 </div>
               </div>
 
-              <div>
-                <label className="flex text-sm font-medium text-zinc-700 mb-1">Preço de Venda ao Público (R$)</label>
-                <input type="number" step="0.01" min="0" name="estimatedSalePrice" defaultValue={editingPiece.estimatedSalePrice || ""} className="w-full h-10 px-3 rounded-md border border-zinc-300 focus:border-[#1E5AA8] outline-none text-sm" placeholder="Deixe 0 para exibir 'Consultar'" />
-                <p className="text-[10px] text-zinc-500 mt-1">Se colocar 0, a loja irá exibir o texto Consultar.</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="flex text-sm font-medium text-zinc-700 mb-1">Preço Normal (R$)</label>
+                  <input type="number" step="0.01" min="0" name="estimatedSalePrice" defaultValue={editingPiece.estimatedSalePrice || ""} className="w-full h-10 px-3 rounded-md border border-zinc-300 focus:border-[#1E5AA8] outline-none text-sm" placeholder="Ex: 0 p/ Consultar" />
+                </div>
+                <div>
+                  <label className="flex text-sm font-medium text-rose-700 mb-1">Preço Promo (R$)</label>
+                  <input type="number" step="0.01" min="0" name="promoPrice" defaultValue={editingPiece.promoPrice || ""} className="w-full h-10 px-3 rounded-md border border-rose-300 focus:border-rose-500 outline-none text-sm bg-rose-50" placeholder="Opcional" />
+                </div>
               </div>
 
               <div>
-                <label className="flex text-sm font-medium text-zinc-700 mb-1">Descrição / Detalhes Visíveis</label>
-                <textarea name="observations" rows={3} defaultValue={editingPiece.observations || ""} className="w-full px-3 py-2 rounded-md border border-zinc-300 focus:border-[#1E5AA8] outline-none text-sm" placeholder="Tamanho M, veste super bem, em perfeito estado..." />
+                <label className="flex text-sm font-medium text-zinc-700 mb-1">Descrição Visível ao Cliente</label>
+                <textarea name="observations" rows={2} defaultValue={editingPiece.observations || ""} className="w-full px-3 py-2 rounded-md border border-zinc-300 focus:border-[#1E5AA8] outline-none text-sm" placeholder="Tamanho M, veste super bem, perfeito estado..." />
               </div>
 
               <div className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-100 rounded-lg">

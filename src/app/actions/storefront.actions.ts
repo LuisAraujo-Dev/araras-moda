@@ -76,6 +76,7 @@ export async function togglePieceVisibilityAction(pieceId: string, isPublished: 
 
 export async function updateStorefrontPieceAction(pieceId: string, data: {
   estimatedSalePrice?: number;
+  promoPrice?: number | null;
   observations?: string;
   isFeatured?: boolean;
   imageUrl?: string | null;
@@ -85,6 +86,7 @@ export async function updateStorefrontPieceAction(pieceId: string, data: {
       where: { id: pieceId },
       data: {
         estimatedSalePrice: data.estimatedSalePrice,
+        promoPrice: data.promoPrice,
         observations: data.observations,
         isFeatured: data.isFeatured,
       }
