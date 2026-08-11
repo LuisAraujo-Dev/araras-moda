@@ -44,8 +44,8 @@ export default function StorefrontManagementPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
 
-  const [logoFile, setLogoFile] = useState<File | null>(null);
-  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [bannerFile, setBannerFile] = useState<File | null>(null);
+  const [bannerPreview, setBannerPreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadData = async (cid: string) => {
@@ -62,7 +62,7 @@ export default function StorefrontManagementPage() {
         instagram: storeResult.data.instagram || "",
         bannerUrl: storeResult.data.bannerUrl || null,
       });
-      setLogoPreview(storeResult.data.bannerUrl || null);
+      setBannerPreview(storeResult.data.bannerUrl || null);
     }
 
     const formattedPieces = (piecesResult as PieceWithImages[]).map(p => ({
@@ -91,11 +91,11 @@ export default function StorefrontManagementPage() {
     return () => { isMounted = false; };
   }, []);
 
-  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleBannerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      setLogoFile(file);
-      setLogoPreview(URL.createObjectURL(file));
+      setBannerFile(file);
+      setBannerPreview(URL.createObjectURL(file));
     }
   };
 
@@ -106,18 +106,18 @@ export default function StorefrontManagementPage() {
 
     let finalBannerUrl = config.bannerUrl;
 
-    if (logoFile) {
+    if (bannerFile) {
       try {
-        const res = await fetch(`/api/upload?filename=${encodeURIComponent(logoFile.name)}`, { 
+        const res = await fetch(`/api/upload?filename=${encodeURIComponent(bannerFile.name)}`, { 
           method: "POST", 
-          body: logoFile 
+          body: bannerFile 
         });
         if (res.ok) {
           const blob = await res.json();
           finalBannerUrl = blob.url;
         }
       } catch {
-        setMessage({ type: 'error', text: 'Falha ao enviar o logotipo.' });
+        setMessage({ type: 'error', text: 'Falha ao enviar a foto.' });
         setSaving(false);
         return;
       }
@@ -214,14 +214,14 @@ export default function StorefrontManagementPage() {
           <div className="p-5 space-y-6">
             
             <div className="flex flex-col items-center justify-center border-b border-zinc-100 pb-6">
-              <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleLogoChange} />
+              <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleBannerChange} />
               <div 
                 onClick={() => fileInputRef.current?.click()} 
                 className="w-24 h-24 rounded-full border-2 border-dashed border-zinc-300 bg-zinc-50 flex items-center justify-center cursor-pointer relative overflow-hidden group hover:border-[#1E5AA8] transition-colors shadow-sm"
               >
-                {logoPreview ? (
+                {bannerPreview ? (
                   <>
-                    <Image src={logoPreview} alt="Logo" fill className="object-cover" />
+                    <Image src={bannerPreview} alt="Logo" fill className="object-cover" />
                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                       <Camera className="w-6 h-6 text-white" />
                     </div>
