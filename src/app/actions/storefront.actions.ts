@@ -1,3 +1,4 @@
+//src/app/actions/storefront.actions.ts
 "use server";
 
 import { prisma } from "@/lib/prisma";
@@ -31,29 +32,49 @@ export async function updateStorefrontConfigAction(data: {
   try {
     const companyId = await getRealCompanyId();
 
-    const config = await prisma.storefrontConfig.upsert({
+    // Verificamos primeiro se a configuração existe para esta empresa
+    const existingConfig = await prisma.storefrontConfig.findUnique({
       where: { companyId },
-      update: {
-        slug: data.slug,
-        description: data.description,
-        whatsapp: data.whatsapp,
-        instagram: data.instagram,
-        logoUrl: data.logoUrl,
-      },
-      create: {
-        companyId,
-        slug: data.slug,
-        description: data.description,
-        whatsapp: data.whatsapp,
-        instagram: data.instagram,
-        logoUrl: data.logoUrl,
-      },
     });
+
+    let config;
+
+    if (existingConfig) {
+      // Se existe, fazemos UPDATE
+      config = await prisma.storefrontConfig.update({
+        where: { companyId },
+        data: {
+          slug: data.slug,
+          description: data.description,
+          whatsapp: data.whatsapp,
+          instagram: data.instagram,
+          logoUrl: data.logoUrl,
+        },
+      });
+    } else {
+      // Se NÃO existe, fazemos CREATE
+      config = await prisma.storefrontConfig.create({
+        data: {
+          companyId,
+          slug: data.slug,
+          description: data.description,
+          whatsapp: data.whatsapp,
+          instagram: data.instagram,
+          logoUrl: data.logoUrl,
+        },
+      });
+    }
 
     revalidatePath("/dashboard/storefront");
     return { success: true, data: config };
-  } catch (error) {
-    console.error(error);
+  } catch (error: any) {
+    console.error("Erro na ação updateStorefrontConfigAction:", error);
+    
+    // Devolve uma mensagem de erro mais amigável caso alguém tente usar um nome que já existe
+    if (error.code === 'P2002' && error.meta?.target?.includes('slug')) {
+      return { success: false, error: "Este nome de loja já está em uso. Por favor, escolha outro." };
+    }
+    
     return { success: false, error: "Falha ao salvar as configurações." };
   }
 }

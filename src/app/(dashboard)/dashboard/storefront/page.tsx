@@ -131,8 +131,11 @@ export default function StorefrontManagementPage() {
       }
     }
 
+    // Criar o slug a partir do nome da loja digitado
+    const formattedSlug = config.slug.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-');
+
     const result = await updateStorefrontConfigAction({
-      slug: config.slug.toLowerCase().replace(/\s+/g, '-'),
+      slug: formattedSlug,
       description: config.description,
       whatsapp: config.whatsapp,
       instagram: config.instagram,
@@ -240,7 +243,6 @@ export default function StorefrontManagementPage() {
 
   const formatCurrency = (val: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : "https://araras-moda.vercel.app";
-  const displayHost = typeof window !== 'undefined' ? window.location.host : "araras-moda.vercel.app";
   const storeUrl = config.slug ? `${baseUrl}/${config.slug}` : "Configure sua loja para gerar o link";
 
   const availablePieces = pieces.filter(p => p.status !== 'VENDIDA');
@@ -300,14 +302,11 @@ export default function StorefrontManagementPage() {
 
             <div className="space-y-4">
               <div>
-                <label className="flex text-sm font-medium text-zinc-700 mb-1">Nome do Link (Slug)</label>
-                <div className="flex w-full">
-                  <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-zinc-300 bg-zinc-50 text-zinc-500 sm:text-sm">{displayHost}/</span>
-                  <input type="text" required value={config.slug} onChange={(e) => setConfig({ ...config, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })} className="flex-1 min-w-0 px-3 py-2 rounded-none rounded-r-md border border-zinc-300 focus:border-[#1E5AA8] outline-none sm:text-sm" placeholder="minha-loja" />
-                </div>
+                <label className="flex text-sm font-medium text-zinc-700 mb-1">Nome da Loja</label>
+                <input type="text" required value={config.slug} onChange={(e) => setConfig({ ...config, slug: e.target.value })} className="w-full px-3 py-2 rounded-md border border-zinc-300 focus:border-[#1E5AA8] outline-none sm:text-sm" placeholder="O nome da sua loja" />
               </div>
               <div>
-                <label className="flex text-sm font-medium text-zinc-700 mb-1">Descrição / Slogan</label>
+                <label className="flex text-sm font-medium text-zinc-700 mb-1">Slogan</label>
                 <textarea rows={3} value={config.description} onChange={(e) => setConfig({ ...config, description: e.target.value })} className="w-full px-3 py-2 rounded-md border border-zinc-300 focus:border-[#1E5AA8] outline-none sm:text-sm" placeholder="Elegância e curadoria exclusiva..." />
               </div>
               <div>
