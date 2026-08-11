@@ -32,7 +32,6 @@ export async function updateStorefrontConfigAction(data: {
   try {
     const companyId = await getRealCompanyId();
 
-    // Verificamos primeiro se a configuração existe para esta empresa
     const existingConfig = await prisma.storefrontConfig.findUnique({
       where: { companyId },
     });
@@ -40,7 +39,6 @@ export async function updateStorefrontConfigAction(data: {
     let config;
 
     if (existingConfig) {
-      // Se existe, fazemos UPDATE
       config = await prisma.storefrontConfig.update({
         where: { companyId },
         data: {
@@ -52,7 +50,6 @@ export async function updateStorefrontConfigAction(data: {
         },
       });
     } else {
-      // Se NÃO existe, fazemos CREATE
       config = await prisma.storefrontConfig.create({
         data: {
           companyId,
@@ -67,12 +64,13 @@ export async function updateStorefrontConfigAction(data: {
 
     revalidatePath("/dashboard/storefront");
     return { success: true, data: config };
-  } catch (error: any) {
-    console.error("Erro na ação updateStorefrontConfigAction:", error);
+  } catch (error: unknown) {
+    console.error(error);
     
-    // Devolve uma mensagem de erro mais amigável caso alguém tente usar um nome que já existe
-    if (error.code === 'P2002' && error.meta?.target?.includes('slug')) {
-      return { success: false, error: "Este nome de loja já está em uso. Por favor, escolha outro." };
+    if (typeof error === "object" && error !== null && "code" in error) {
+      if ((error as { code: string }).code === "P2002") {
+        return { success: false, error: "Este nome de loja já está em uso. Por favor, escolha outro." };
+      }
     }
     
     return { success: false, error: "Falha ao salvar as configurações." };
