@@ -17,7 +17,7 @@ export async function getStorefrontConfigAction() {
     });
     return { success: true, data: config };
   } catch (error) {
-    console.error("Erro ao buscar configuração da vitrine:", error);
+    console.error(error);
     return { success: false, error: "Falha ao carregar a configuração." };
   }
 }
@@ -27,6 +27,7 @@ export async function updateStorefrontConfigAction(data: {
   description?: string;
   whatsapp?: string;
   instagram?: string;
+  bannerUrl?: string;
 }) {
   try {
     const companyId = await getRealCompanyId();
@@ -38,6 +39,7 @@ export async function updateStorefrontConfigAction(data: {
         description: data.description,
         whatsapp: data.whatsapp,
         instagram: data.instagram,
+        bannerUrl: data.bannerUrl,
       },
       create: {
         companyId,
@@ -45,13 +47,14 @@ export async function updateStorefrontConfigAction(data: {
         description: data.description,
         whatsapp: data.whatsapp,
         instagram: data.instagram,
+        bannerUrl: data.bannerUrl,
       },
     });
 
     revalidatePath("/dashboard/storefront");
     return { success: true, data: config };
   } catch (error) {
-    console.error("Erro ao salvar vitrine:", error);
+    console.error(error);
     return { success: false, error: "Falha ao salvar as configurações." };
   }
 }
@@ -67,7 +70,7 @@ export async function togglePieceVisibilityAction(pieceId: string, isPublished: 
     revalidatePath("/dashboard/storefront");
     return { success: true };
   } catch (error) {
-    console.error("Erro ao alterar visibilidade da peça:", error);
+    console.error(error);
     return { success: false, error: "Falha ao atualizar o status da peça na loja." };
   }
 }
