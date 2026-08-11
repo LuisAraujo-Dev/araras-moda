@@ -15,7 +15,7 @@ type StoreConfig = {
   description: string;
   whatsapp: string;
   instagram: string;
-  bannerUrl: string | null;
+  logoUrl: string | null;
 };
 
 type PieceBasic = {
@@ -36,7 +36,7 @@ export default function StorefrontManagementPage() {
     description: "",
     whatsapp: "",
     instagram: "",
-    bannerUrl: null,
+    logoUrl: null,
   });
   
   const [pieces, setPieces] = useState<PieceBasic[]>([]);
@@ -44,8 +44,8 @@ export default function StorefrontManagementPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
 
-  const [bannerFile, setBannerFile] = useState<File | null>(null);
-  const [bannerPreview, setBannerPreview] = useState<string | null>(null);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadData = async (cid: string) => {
@@ -60,9 +60,9 @@ export default function StorefrontManagementPage() {
         description: storeResult.data.description || "",
         whatsapp: storeResult.data.whatsapp || "",
         instagram: storeResult.data.instagram || "",
-        bannerUrl: storeResult.data.bannerUrl || null,
+        logoUrl: storeResult.data.logoUrl || null,
       });
-      setBannerPreview(storeResult.data.bannerUrl || null);
+      setLogoPreview(storeResult.data.logoUrl || null);
     }
 
     const formattedPieces = (piecesResult as PieceWithImages[]).map(p => ({
@@ -91,11 +91,11 @@ export default function StorefrontManagementPage() {
     return () => { isMounted = false; };
   }, []);
 
-  const handleBannerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      setBannerFile(file);
-      setBannerPreview(URL.createObjectURL(file));
+      setLogoFile(file);
+      setLogoPreview(URL.createObjectURL(file));
     }
   };
 
@@ -104,20 +104,20 @@ export default function StorefrontManagementPage() {
     setSaving(true);
     setMessage(null);
 
-    let finalBannerUrl = config.bannerUrl;
+    let finalLogoUrl = config.logoUrl;
 
-    if (bannerFile) {
+    if (logoFile) {
       try {
-        const res = await fetch(`/api/upload?filename=${encodeURIComponent(bannerFile.name)}`, { 
+        const res = await fetch(`/api/upload?filename=${encodeURIComponent(logoFile.name)}`, { 
           method: "POST", 
-          body: bannerFile 
+          body: logoFile 
         });
         if (res.ok) {
           const blob = await res.json();
-          finalBannerUrl = blob.url;
+          finalLogoUrl = blob.url;
         }
       } catch {
-        setMessage({ type: 'error', text: 'Falha ao enviar a foto.' });
+        setMessage({ type: 'error', text: 'Falha ao enviar o logotipo.' });
         setSaving(false);
         return;
       }
@@ -128,7 +128,7 @@ export default function StorefrontManagementPage() {
       description: config.description,
       whatsapp: config.whatsapp,
       instagram: config.instagram,
-      bannerUrl: finalBannerUrl || undefined,
+      logoUrl: finalLogoUrl || undefined,
     });
 
     if (result.success) {
@@ -139,7 +139,7 @@ export default function StorefrontManagementPage() {
           description: result.data.description || "",
           whatsapp: result.data.whatsapp || "",
           instagram: result.data.instagram || "",
-          bannerUrl: result.data.bannerUrl || null,
+          logoUrl: result.data.logoUrl || null,
         });
       }
     } else {
@@ -214,14 +214,14 @@ export default function StorefrontManagementPage() {
           <div className="p-5 space-y-6">
             
             <div className="flex flex-col items-center justify-center border-b border-zinc-100 pb-6">
-              <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleBannerChange} />
+              <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleLogoChange} />
               <div 
                 onClick={() => fileInputRef.current?.click()} 
                 className="w-24 h-24 rounded-full border-2 border-dashed border-zinc-300 bg-zinc-50 flex items-center justify-center cursor-pointer relative overflow-hidden group hover:border-[#1E5AA8] transition-colors shadow-sm"
               >
-                {bannerPreview ? (
+                {logoPreview ? (
                   <>
-                    <Image src={bannerPreview} alt="Logo" fill className="object-cover" />
+                    <Image src={logoPreview} alt="Logo" fill className="object-cover" />
                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                       <Camera className="w-6 h-6 text-white" />
                     </div>

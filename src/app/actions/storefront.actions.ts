@@ -1,4 +1,3 @@
-//src/app/actions/storefront.actions.ts
 "use server";
 
 import { prisma } from "@/lib/prisma";
@@ -27,7 +26,7 @@ export async function updateStorefrontConfigAction(data: {
   description?: string;
   whatsapp?: string;
   instagram?: string;
-  bannerUrl?: string;
+  logoUrl?: string;
 }) {
   try {
     const companyId = await getRealCompanyId();
@@ -39,7 +38,7 @@ export async function updateStorefrontConfigAction(data: {
         description: data.description,
         whatsapp: data.whatsapp,
         instagram: data.instagram,
-        bannerUrl: data.bannerUrl,
+        logoUrl: data.logoUrl,
       },
       create: {
         companyId,
@@ -47,7 +46,7 @@ export async function updateStorefrontConfigAction(data: {
         description: data.description,
         whatsapp: data.whatsapp,
         instagram: data.instagram,
-        bannerUrl: data.bannerUrl,
+        logoUrl: data.logoUrl,
       },
     });
 

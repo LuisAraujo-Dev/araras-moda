@@ -63,9 +63,9 @@ export default async function PublicStorefrontPage(props: {
         <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_center,var(--tw-gradient-stops))] from-white via-transparent to-transparent"></div>
         <div className="max-w-4xl mx-auto text-center relative z-10 flex flex-col items-center">
           
-          {config.bannerUrl ? (
+          {config.logoUrl ? (
             <div className="w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden border-4 border-white/10 shadow-2xl mb-6 relative">
-              <Image src={config.bannerUrl} alt={config.company.name} fill className="object-cover" />
+              <Image src={config.logoUrl} alt={config.company.name} fill className="object-cover" />
             </div>
           ) : (
             <div className="w-20 h-20 md:w-24 md:h-24 bg-white text-[#0A244A] rounded-full flex items-center justify-center mx-auto mb-6 text-3xl font-bold shadow-2xl">
