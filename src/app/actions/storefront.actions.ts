@@ -73,3 +73,42 @@ export async function togglePieceVisibilityAction(pieceId: string, isPublished: 
     return { success: false, error: "Falha ao atualizar o status da peça na loja." };
   }
 }
+
+export async function updateStorefrontPieceAction(pieceId: string, data: {
+  estimatedSalePrice?: number;
+  observations?: string;
+  isFeatured?: boolean;
+  imageUrl?: string | null;
+}) {
+  try {
+    await prisma.piece.update({
+      where: { id: pieceId },
+      data: {
+        estimatedSalePrice: data.estimatedSalePrice,
+        observations: data.observations,
+        isFeatured: data.isFeatured,
+      }
+    });
+
+    if (data.imageUrl) {
+      const existingImages = await prisma.pieceImage.findMany({ where: { pieceId }, orderBy: { order: 'asc' } });
+      if (existingImages.length > 0) {
+        await prisma.pieceImage.update({
+          where: { id: existingImages[0].id },
+          data: { imageUrl: data.imageUrl }
+        });
+      } else {
+        await prisma.pieceImage.create({
+          data: { pieceId, imageUrl: data.imageUrl, order: 0 }
+        });
+      }
+    }
+
+    revalidatePath("/dashboard/storefront");
+    revalidatePath("/dashboard/inventory");
+    return { success: true };
+  } catch (error) {
+    console.error(error);
+    return { success: false, error: "Falha ao atualizar a peça na vitrine." };
+  }
+}

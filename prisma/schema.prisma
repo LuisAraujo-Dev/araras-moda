@@ -212,8 +212,8 @@ model Piece {
   storeId            String?
   
   // --- CAMPOS DA VITRINE VIRTUAL ---
-  isPublished        Boolean                @default(false)
-  isFeatured         Boolean                @default(false)
+  isPublished          Boolean       @default(false)
+  isFeatured           Boolean       @default(false)
   promoPrice         Float?
   // ---------------------------------
 

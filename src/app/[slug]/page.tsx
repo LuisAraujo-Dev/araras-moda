@@ -44,7 +44,7 @@ export default async function PublicStorefrontPage(props: {
     ? pieces.filter(p => p.category.name === currentCategory)
     : pieces;
 
-  const featuredPieces = pieces.slice(0, 4);
+  const featuredPieces = pieces.filter(p => p.isFeatured);
 
   const formatCurrency = (val: number) => 
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
@@ -64,7 +64,7 @@ export default async function PublicStorefrontPage(props: {
         <div className="max-w-4xl mx-auto text-center relative z-10 flex flex-col items-center">
           
           {config.logoUrl ? (
-            <div className="w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden border-4 border-white/10 shadow-2xl mb-6 relative">
+            <div className="w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden border-4 border-white/10 shadow-2xl mb-6 relative bg-white">
               <Image src={config.logoUrl} alt={config.company.name} fill className="object-cover" />
             </div>
           ) : (
@@ -163,6 +163,9 @@ export default async function PublicStorefrontPage(props: {
 
                 <div className="px-1 flex-1 flex flex-col">
                   <h3 className="text-sm font-medium text-zinc-900 leading-snug tracking-wide line-clamp-2 mb-1">{piece.name}</h3>
+                  {piece.observations && (
+                    <p className="text-xs text-zinc-500 font-light line-clamp-1 mb-2 tracking-wide">{piece.observations}</p>
+                  )}
                   <div className="flex justify-between items-end mt-auto pt-2">
                     <div className="flex flex-col">
                       <span className="text-[10px] text-zinc-400 font-light uppercase tracking-wider">Ref: {piece.code}</span>
