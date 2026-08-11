@@ -97,7 +97,7 @@ export async function updateStorefrontPieceAction(pieceId: string, data: {
   promoPrice?: number | null;
   observations?: string;
   isFeatured?: boolean;
-  imageUrl?: string | null;
+  imageUrls?: string[];
 }) {
   try {
     await prisma.piece.update({
@@ -110,16 +110,16 @@ export async function updateStorefrontPieceAction(pieceId: string, data: {
       }
     });
 
-    if (data.imageUrl) {
-      const existingImages = await prisma.pieceImage.findMany({ where: { pieceId }, orderBy: { order: 'asc' } });
-      if (existingImages.length > 0) {
-        await prisma.pieceImage.update({
-          where: { id: existingImages[0].id },
-          data: { imageUrl: data.imageUrl }
-        });
-      } else {
-        await prisma.pieceImage.create({
-          data: { pieceId, imageUrl: data.imageUrl, order: 0 }
+    if (data.imageUrls) {
+      await prisma.pieceImage.deleteMany({ where: { pieceId } });
+      
+      if (data.imageUrls.length > 0) {
+        await prisma.pieceImage.createMany({
+          data: data.imageUrls.map((url, index) => ({
+            pieceId,
+            imageUrl: url,
+            order: index
+          }))
         });
       }
     }

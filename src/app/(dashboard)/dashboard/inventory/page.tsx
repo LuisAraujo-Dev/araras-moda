@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Package, PlusCircle, Tag, CheckCircle2, AlertCircle, Pencil, Trash2, Store, ArrowLeft, ChevronDown, Search, Check, ImageIcon, Camera, SlidersHorizontal, Settings2 } from "lucide-react";
+import { Package, PlusCircle, Tag, CheckCircle2, AlertCircle, Pencil, Trash2, Store, ArrowLeft, ChevronDown, Search, Check, ImageIcon, Camera, SlidersHorizontal, Settings2, X } from "lucide-react";
 import { getPiecesAction, createPieceAction, updatePieceAction, deletePieceAction, getTaxonomyAction, quickAddCategory, quickAddBrand, quickAddSize, quickAddColor, quickAddLot, quickAddStore, deleteTaxonomyAction } from "@/app/actions/piece.actions";
 import { checkOnboardingStatusAction } from "@/app/actions/setup.actions";
 import { Category, Brand, Lot, Size, Color, Piece, Store as StoreModel, PieceImage } from "@prisma/client";
@@ -125,8 +125,7 @@ export default function InventoryPage() {
   const [filterTags, setFilterTags] = useState<string[]>([]);
   const [advFilters, setAdvFilters] = useState({ category: "", brand: "", lot: "", store: "", size: "", color: "" });
 
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [images, setImages] = useState<{ url: string; file: File | null }[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [quickAdd, setQuickAdd] = useState({ isOpen: false, type: "", label: "" });
@@ -181,9 +180,7 @@ export default function InventoryPage() {
 
   const handleSaveQuickAdd = async () => {
     if (!quickAddValue || quickAddValue.trim() === "" || !companyId) return;
-    
     setLoading(true); let newRecord;
-    
     if (quickAdd.type === 'category') newRecord = await quickAddCategory(companyId, quickAddValue);
     if (quickAdd.type === 'brand') newRecord = await quickAddBrand(companyId, quickAddValue);
     if (quickAdd.type === 'size') newRecord = await quickAddSize(companyId, quickAddValue);
@@ -216,15 +213,25 @@ export default function InventoryPage() {
   const toggleFilterTag = (tag: string) => setFilterTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0]; setImageFile(file); setImagePreview(URL.createObjectURL(file));
+    if (e.target.files) {
+      const newFiles = Array.from(e.target.files).map(file => ({
+        url: URL.createObjectURL(file),
+        file
+      }));
+      setImages(prev => [...prev, ...newFiles]);
     }
+  };
+
+  const removeImage = (index: number) => {
+    setImages(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleEditClick = (piece: PieceWithRelations) => {
     setEditingPiece(piece); setCatId(piece.categoryId); setBrandId(piece.brandId);
     setSizeId(piece.sizeId || ""); setColorId(piece.colorId || ""); setLotId(piece.lotId); setStoreId(piece.storeId || ""); 
-    setSelectedTags(piece.tags || []); setImagePreview(piece.images && piece.images.length > 0 ? piece.images[0].imageUrl : null); setImageFile(null); setOpen(true);
+    setSelectedTags(piece.tags || []); 
+    setImages(piece.images?.map(img => ({ url: img.imageUrl, file: null })) || []);
+    setOpen(true);
   };
 
   const handleCloseModal = (val: boolean) => {
@@ -232,35 +239,40 @@ export default function InventoryPage() {
     if (!val) {
       setEditingPiece(null); setQuickAdd({ isOpen: false, type: "", label: "" });
       setCatId(""); setBrandId(""); setSizeId(""); setColorId(""); setLotId(""); setStoreId(""); setSelectedTags([]);
-      setImagePreview(null); setImageFile(null);
+      setImages([]);
     }
   };
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (!companyId) return;
     const formData = new FormData(event.currentTarget);
-    setLoading(true); let finalImageUrl = imagePreview; 
+    setLoading(true); setIsUploading(true);
+    const finalImageUrls: string[] = []; 
 
-    if (imageFile) {
-      setIsUploading(true);
-      try {
-        const res = await fetch(`/api/upload?filename=${encodeURIComponent(imageFile.name)}`, { method: "POST", body: imageFile });
-        if (res.ok) { const blob = await res.json(); finalImageUrl = blob.url; }
-      } catch { showBanner("Erro na foto.", "error"); }
-      setIsUploading(false);
+    for (const img of images) {
+      if (img.file) {
+        try {
+          const res = await fetch(`/api/upload?filename=${encodeURIComponent(img.file.name)}`, { method: "POST", body: img.file });
+          if (res.ok) { const blob = await res.json(); finalImageUrls.push(blob.url); }
+        } catch { showBanner("Erro na foto.", "error"); }
+      } else {
+        finalImageUrls.push(img.url);
+      }
     }
+    setIsUploading(false);
 
     const c = taxonomy.categories.find(x => x.id === catId)?.name || "";
     const b = taxonomy.brands.find(x => x.id === brandId)?.name || "";
     const s = taxonomy.sizes.find(x => x.id === sizeId)?.name || "";
     const co = taxonomy.colors.find(x => x.id === colorId)?.name || "";
     const autoName = [c, b, s ? `Tamanho ${s}` : "", co].filter(Boolean).join(" ") || "Nova Peça";
-    const safeImageUrl = finalImageUrl && !finalImageUrl.startsWith('blob:') ? finalImageUrl : undefined;
 
     const data = {
       name: autoName, categoryId: catId, brandId: brandId, sizeId: sizeId, colorId: colorId, tags: selectedTags, observations: formData.get("observations") as string, 
       lotId: lotId, storeId: isConsigned ? (storeId || null) : null, purchasePrice: Number(formData.get("purchasePrice")), registerSale: showSalePriceInput, 
-      salePrice: showSalePriceInput ? Number(formData.get("salePrice")) : undefined, imageUrl: safeImageUrl
+      salePrice: showSalePriceInput ? Number(formData.get("salePrice")) : undefined, 
+      imageUrl: finalImageUrls[0] || undefined,
+      imageUrls: finalImageUrls
     };
 
     const result = editingPiece ? await updatePieceAction(editingPiece.id, companyId, data) : await createPieceAction(companyId, data);
@@ -361,12 +373,27 @@ export default function InventoryPage() {
                 <>
                   <DialogHeader><DialogTitle>{editingPiece ? "Editar Peça" : "Cadastrar Peça"}</DialogTitle></DialogHeader>
                   <form onSubmit={handleSubmit} className="space-y-5 pt-2">
-                    <div className="flex justify-center mb-6">
-                      <input type="file" accept="image/*" capture="environment" className="hidden" ref={fileInputRef} onChange={handleImageChange} />
-                      <div onClick={() => fileInputRef.current?.click()} className="w-32 h-32 rounded-xl border-2 border-dashed border-zinc-300 bg-zinc-50 flex flex-col items-center justify-center cursor-pointer relative overflow-hidden group">
-                        {imagePreview ? <Image src={imagePreview} alt="Preview" fill className="object-cover" /> : <><Camera className="w-8 h-8 text-zinc-400" /><span className="text-xs text-zinc-500">Foto</span></>}
+                    
+                    <div className="space-y-3 mb-4">
+                      <Label className="text-[#0A244A]">Fotos da Peça</Label>
+                      <div className="flex gap-3 overflow-x-auto pb-2 custom-scrollbar">
+                        {images.map((img, idx) => (
+                          <div key={idx} className="relative w-24 h-32 rounded-lg border border-zinc-200 overflow-hidden shrink-0 group">
+                            <Image src={img.url} alt={`Foto ${idx + 1}`} fill className="object-cover" />
+                            <button type="button" onClick={() => removeImage(idx)} className="absolute top-1 right-1 bg-rose-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                        
+                        <input type="file" multiple accept="image/*" className="hidden" ref={fileInputRef} onChange={handleImageChange} />
+                        <button type="button" onClick={() => fileInputRef.current?.click()} className="w-24 h-32 rounded-lg border-2 border-dashed border-zinc-300 bg-zinc-50 flex flex-col items-center justify-center text-zinc-400 hover:text-[#1E5AA8] hover:border-[#1E5AA8] transition-colors shrink-0 cursor-pointer">
+                          <Camera className="w-6 h-6 mb-1" />
+                          <span className="text-[10px] font-medium text-center">Adicionar<br/>Foto</span>
+                        </button>
                       </div>
                     </div>
+
                     <div className="grid grid-cols-2 gap-4">
                       <div><Label>Categoria</Label><SearchableSelect value={catId} onChange={setCatId} options={taxonomy.categories} placeholder="Selecione" newItemLabel="Nova Categoria" onAddNew={() => triggerQuickAdd('category', 'Categoria')} /></div>
                       <div><Label>Marca</Label><SearchableSelect value={brandId} onChange={setBrandId} options={taxonomy.brands} placeholder="Selecione" newItemLabel="Nova Marca" onAddNew={() => triggerQuickAdd('brand', 'Marca')} /></div>

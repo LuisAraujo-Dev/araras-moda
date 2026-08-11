@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
-import { Store, Save, Link as LinkIcon, AtSign, Smartphone, Share2, Globe, EyeOff, Package, ImageIcon, Loader2, Camera, Pencil, Sparkles } from "lucide-react";
+import { Store, Save, Link as LinkIcon, AtSign, Smartphone, Share2, Globe, EyeOff, Package, ImageIcon, Loader2, Camera, Pencil, Sparkles, X } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getStorefrontConfigAction, updateStorefrontConfigAction, togglePieceVisibilityAction, updateStorefrontPieceAction } from "@/app/actions/storefront.actions";
 import { getPiecesAction } from "@/app/actions/piece.actions";
@@ -30,7 +30,7 @@ type PieceBasic = {
   isPublished: boolean;
   isFeatured: boolean;
   status: string;
-  imageUrl: string | null;
+  images: { imageUrl: string }[];
 };
 
 type PieceWithImages = Piece & { images?: PieceImage[] };
@@ -50,8 +50,7 @@ export default function StorefrontManagementPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [editingPiece, setEditingPiece] = useState<PieceBasic | null>(null);
-  const [pieceFile, setPieceFile] = useState<File | null>(null);
-  const [piecePreview, setPiecePreview] = useState<string | null>(null);
+  const [pieceImages, setPieceImages] = useState<{ url: string; file: File | null }[]>([]);
   const [isUploadingPiece, setIsUploadingPiece] = useState(false);
   const pieceFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -83,7 +82,7 @@ export default function StorefrontManagementPage() {
       isPublished: p.isPublished,
       isFeatured: p.isFeatured || false,
       status: p.status,
-      imageUrl: p.images && p.images.length > 0 ? p.images[0].imageUrl : null
+      images: p.images ? p.images.map(img => ({ imageUrl: img.imageUrl })) : []
     }));
     
     setPieces(formattedPieces);
@@ -131,7 +130,6 @@ export default function StorefrontManagementPage() {
       }
     }
 
-    // Criar o slug a partir do nome da loja digitado
     const formattedSlug = config.slug.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-');
 
     const result = await updateStorefrontConfigAction({
@@ -171,11 +169,17 @@ export default function StorefrontManagementPage() {
   };
 
   const handlePieceImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setPieceFile(file);
-      setPiecePreview(URL.createObjectURL(file));
+    if (e.target.files) {
+      const newFiles = Array.from(e.target.files).map(file => ({
+        url: URL.createObjectURL(file),
+        file
+      }));
+      setPieceImages(prev => [...prev, ...newFiles]);
     }
+  };
+
+  const removePieceImage = (index: number) => {
+    setPieceImages(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleSubmitPieceEdit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -184,19 +188,21 @@ export default function StorefrontManagementPage() {
     setIsUploadingPiece(true);
 
     const formData = new FormData(e.currentTarget);
-    let finalImageUrl = piecePreview;
+    const finalImageUrls: string[] = [];
 
-    if (pieceFile) {
-      try {
-        const res = await fetch(`/api/upload?filename=${encodeURIComponent(pieceFile.name)}`, { method: "POST", body: pieceFile });
-        if (res.ok) {
-          const blob = await res.json();
-          finalImageUrl = blob.url;
+    for (const img of pieceImages) {
+      if (img.file) {
+        try {
+          const res = await fetch(`/api/upload?filename=${encodeURIComponent(img.file.name)}`, { method: "POST", body: img.file });
+          if (res.ok) {
+            const blob = await res.json();
+            finalImageUrls.push(blob.url);
+          }
+        } catch {
+          setMessage({ type: 'error', text: 'Erro ao enviar foto da peça.' });
         }
-      } catch {
-        setMessage({ type: 'error', text: 'Erro ao enviar foto da peça.' });
-        setIsUploadingPiece(false);
-        return;
+      } else {
+        finalImageUrls.push(img.url);
       }
     }
 
@@ -207,7 +213,7 @@ export default function StorefrontManagementPage() {
       promoPrice: promoPriceRaw ? Number(promoPriceRaw) : null,
       observations: formData.get("observations") as string,
       isFeatured: formData.get("isFeatured") === "on",
-      imageUrl: finalImageUrl && !finalImageUrl.startsWith('blob:') ? finalImageUrl : undefined
+      imageUrls: finalImageUrls
     };
 
     const result = await updateStorefrontPieceAction(editingPiece.id, data);
@@ -219,7 +225,7 @@ export default function StorefrontManagementPage() {
         promoPrice: data.promoPrice,
         observations: data.observations, 
         isFeatured: data.isFeatured,
-        imageUrl: finalImageUrl 
+        images: finalImageUrls.map(url => ({ imageUrl: url }))
       } : p));
       setMessage({ type: 'success', text: 'Peça atualizada com sucesso!' });
       setEditingPiece(null);
@@ -244,7 +250,6 @@ export default function StorefrontManagementPage() {
   const formatCurrency = (val: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : "https://araras-moda.vercel.app";
   const storeUrl = config.slug ? `${baseUrl}/${config.slug}` : "Configure sua loja para gerar o link";
-
   const availablePieces = pieces.filter(p => p.status !== 'VENDIDA');
 
   return (
@@ -298,6 +303,7 @@ export default function StorefrontManagementPage() {
                   </div>
                 )}
               </div>
+              <p className="text-xs text-zinc-500 mt-3 text-center">Clique para alterar a foto principal da sua loja.</p>
             </div>
 
             <div className="space-y-4">
@@ -349,8 +355,8 @@ export default function StorefrontManagementPage() {
                   <div key={piece.id} className={`flex items-start gap-3 p-3 rounded-lg border transition-all ${piece.isPublished ? 'bg-emerald-50/30 border-emerald-200 shadow-sm' : 'bg-white border-zinc-200'}`}>
                     
                     <div className="w-16 h-20 rounded-md bg-zinc-100 border border-zinc-200 overflow-hidden relative shrink-0 flex items-center justify-center">
-                      {piece.imageUrl ? (
-                        <Image src={piece.imageUrl} alt={piece.name} fill className="object-cover" sizes="64px" />
+                      {piece.images.length > 0 ? (
+                        <Image src={piece.images[0].imageUrl} alt={piece.name} fill className="object-cover" sizes="64px" />
                       ) : (
                         <ImageIcon className="w-5 h-5 text-zinc-300" />
                       )}
@@ -376,7 +382,7 @@ export default function StorefrontManagementPage() {
                     </div>
 
                     <div className="flex flex-col gap-1.5 shrink-0">
-                      <button onClick={() => { setEditingPiece(piece); setPiecePreview(piece.imageUrl); setPieceFile(null); }} className="p-2 rounded-md transition-all cursor-pointer border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100" title="Editar Peça na Loja">
+                      <button onClick={() => { setEditingPiece(piece); setPieceImages(piece.images.map(img => ({ url: img.imageUrl, file: null }))); }} className="p-2 rounded-md transition-all cursor-pointer border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100" title="Editar Peça na Loja">
                         <Pencil className="w-4 h-4" />
                       </button>
                       <button onClick={() => handleToggleVisibility(piece.id, piece.isPublished)} className={`p-2 rounded-md transition-all cursor-pointer border ${piece.isPublished ? "border-emerald-300 text-emerald-700 bg-emerald-100 hover:bg-emerald-200" : "border-zinc-200 text-zinc-400 bg-zinc-50 hover:bg-zinc-100 hover:text-zinc-700"}`} title={piece.isPublished ? "Remover da Vitrine" : "Publicar na Vitrine"}>
@@ -402,22 +408,22 @@ export default function StorefrontManagementPage() {
           {editingPiece && (
             <form onSubmit={handleSubmitPieceEdit} className="space-y-5 pt-4">
               
-              <div className="flex justify-center">
-                <input type="file" accept="image/*" capture="environment" className="hidden" ref={pieceFileInputRef} onChange={handlePieceImageChange} />
-                <div onClick={() => pieceFileInputRef.current?.click()} className="w-32 h-40 rounded-lg border-2 border-dashed border-zinc-300 bg-zinc-50 flex items-center justify-center cursor-pointer relative overflow-hidden group hover:border-[#1E5AA8] transition-colors">
-                  {piecePreview ? (
-                    <>
-                      <Image src={piecePreview} alt="Peça" fill className="object-cover" />
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <Camera className="w-8 h-8 text-white" />
-                      </div>
-                    </>
-                  ) : (
-                    <div className="flex flex-col items-center text-zinc-400 group-hover:text-[#1E5AA8]">
-                      <Camera className="w-8 h-8 mb-2" />
-                      <span className="text-xs font-medium">Mudar Foto</span>
+              <div>
+                <label className="flex text-sm font-medium text-zinc-700 mb-2">Fotos Visíveis na Loja</label>
+                <div className="flex gap-3 overflow-x-auto pb-2 custom-scrollbar">
+                  {pieceImages.map((img, idx) => (
+                    <div key={idx} className="relative w-20 h-28 rounded-lg border border-zinc-200 overflow-hidden shrink-0 group">
+                      <Image src={img.url} alt={`Foto ${idx + 1}`} fill className="object-cover" />
+                      <button type="button" onClick={() => removePieceImage(idx)} className="absolute top-1 right-1 bg-rose-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                        <X className="w-3 h-3" />
+                      </button>
                     </div>
-                  )}
+                  ))}
+                  <input type="file" multiple accept="image/*" className="hidden" ref={pieceFileInputRef} onChange={handlePieceImageChange} />
+                  <button type="button" onClick={() => pieceFileInputRef.current?.click()} className="w-20 h-28 rounded-lg border-2 border-dashed border-zinc-300 bg-zinc-50 flex flex-col items-center justify-center text-zinc-400 hover:text-[#1E5AA8] hover:border-[#1E5AA8] transition-colors shrink-0 cursor-pointer">
+                    <Camera className="w-5 h-5 mb-1" />
+                    <span className="text-[9px] font-medium text-center">Adicionar</span>
+                  </button>
                 </div>
               </div>
 
